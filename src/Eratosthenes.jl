@@ -13,7 +13,7 @@ simulate(scenario)
 module Eratosthenes
 
 import Base.convert # Required in order to extend 'convert'.
-import JSON
+# import JSON
 import YAML
 using HDF5Logger
 
