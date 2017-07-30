@@ -1,0 +1,27 @@
+sim:
+    dt: 0.02
+    t_end: 60.
+    date_0: [2017, 6, 29, 17, 6, 32.2] # Comments look like this.
+    log_file: out/my_log.h5
+planet:
+    model: Earth
+vehicles:
+    - model: Vehicle
+      name: cube1
+      body:
+          constants:
+              m: 55.
+              I_B: [[5., 0., 0.],
+                    [0., 5., 0.],
+                    [0., 0., 5.]]
+          state:
+              q_BI: normalize([0.5; 1; 0.2; 0]) # This is evaluated.
+      sensors:
+          - model: TruthSensor
+            dt: 0.05
+      actuators:
+          - model: IdealActuator
+            dt: 0.05
+      software:
+          - model: IdealPDController
+            dt: 0.05

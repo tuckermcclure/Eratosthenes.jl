@@ -10,6 +10,7 @@ notifications:
   email: false
 git:
   depth: 99999999
+sudo: required
 
 ## uncomment the following lines to allow failures on nightly julia
 ## (tests will run but not make your overall status red)
@@ -30,6 +31,6 @@ git:
 #  - julia -e 'Pkg.clone(pwd()); Pkg.build("Eratosthenes"); Pkg.test("Eratosthenes"; coverage=true)'
 after_success:
   # push coverage results to Coveralls
-  - julia -e 'cd(Pkg.dir("Eratosthenes")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
+  - julia -e 'cd(Pkg.dir("Eratosthenes")); Pkg.clone("https://github.com/tuckermcclure/HDF5Logger.jl.git"); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
   # push coverage results to Codecov
-  - julia -e 'cd(Pkg.dir("Eratosthenes")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
+  - julia -e 'cd(Pkg.dir("Eratosthenes")); Pkg.clone("https://github.com/tuckermcclure/HDF5Logger.jl.git"); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'

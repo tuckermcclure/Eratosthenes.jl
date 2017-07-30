@@ -1,0 +1,88 @@
+How to structure "whole truth"?
+How to structure sensor/actuator measurement bus?
+How to structure actuator command bus?
+How to structure software comm bus?
+
+whole_truth:
+environment? what environment state is there?
+cube1
+  sensors
+    gyro
+    star_tracker
+
+measurement_bus: (always vehicle-specific)
+sensors
+  gyro
+  star_tracker
+actuators
+  thruster1
+  reaction_wheel1
+
+command_bus:
+software
+  test_controller
+actuators
+
+Why not show me what measurements and commands look like on model creation, and then just allow `init` to return the initial state? Perhaps models will want to change their measurements or commands based on the "whole truth".
+
+Interfaces:
+-----------
+
+init (add planet?)
+----
+body      t, constants, state, draws -> state
+sensor    t, constants, state, draws, vehicle_truth -> state, measurement
+actuator  t, constants, state, draws, vehicle_truth -> state, measurement, commands
+software  t, constants, state -> state, inputs, outputs
+
+derivatives
+-----------
+body      t, constants, state, draws, planet, forces
+
+step
+----
+sensor    t, constants, state, draws, vehicle_truth, truth -> state
+actuator  t, constants, state, draws, command, vehicle_truth, truth -> state
+software  t, constants, state, measurements, my_inputs (read-only), outputs (read-only), all_inputs (write-only), commands (write-only) -> state, inputs, output, commands
+body      t, constants, state, draws, planet -> truth
+
+sense (don't these need to sense the planet?)
+-----
+sensor    t, constants, state, draws, vehicle_truth, truth
+actuator  t, constants, state, draws, commands, vehicle_truth, truth
+
+actuate
+-------
+t, constants, state, rand, command, vehicle_truth, truth
+
+truth
+-----
+body
+actuator
+
+
+Later:
+
+How do we decide what gets logged?
+-> Maintain a list of signals to log, e.g.:
+    /cube1/sensors/gyro (logs measurements)
+    /cube1/sensors/gyro/w_BI_I (logs .../gyro/time, .../gyro/data/w_BI_B)
+    /cube1/body/state (logs whole state as .../state/time, .../state/data/r_me_I, ...)
+    /cube1/body/state/r_me_I (logs .../state/time, .../state/data/r_me_I, ...)
+    /cube1/sensors/* (logs measurements)
+    /*/sensors/* (logs measurements)
+  -> This could be a vector of strings.
+
+Can we automatically plot what gets logged?
+-> This would be easy with HDF5's group exploration stuff.
+-> Could use the spec above, too.
+
+How do we allow actuators to have continuous states?
+-> Break state up into continuous and dynamic components? This seems reasonable, since the variables are actually pretty different, but it requires two twos: one for discrete and one for continuous.
+-> Keep them together, but return `nothing` for discrete fields as output of `derivatives`. This is tedious.
+-> We can allow the discrete update to overwrite the continuous state if desired.
+
+How do we make a consistent environment?
+-> Make planet a Model?
+
+Constructors could have arguments.

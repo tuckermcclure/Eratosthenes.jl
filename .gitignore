@@ -1,3 +1,9 @@
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
+*.h5
+
+# Development stuff
+*/.archive/
+*/out/
+*/scrap.jl
