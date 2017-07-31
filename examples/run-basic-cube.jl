@@ -4,8 +4,10 @@ using Eratosthenes # The primary spacecraft simulation environment
 import HDF5 # For loading the log file
 using Plots
 
+scenario = setup(Scenario(), "scenarios/basic-cube.yaml")
+
 # Run the sim. Outputs will be in the log file.
-simulate("scenarios/basic-cube.yaml")
+simulate(scenario)
 
 # Open the logs and plot some things.
 if !isempty(scenario.sim.log_file)
