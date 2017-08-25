@@ -172,7 +172,9 @@ function simulate(scenario::Scenario)
 
             # Update the progress bar.
             if scenario.sim.progress_fcn != nothing
-                scenario.sim.progress_fcn((k-1)/nt)
+                if scenario.sim.progress_fcn((k-1)/nt) == false
+                    break;
+                end
             end
 
             #############
@@ -318,11 +320,27 @@ function simulate(scenario::Scenario)
     run_time  = (time_ns() - start_time) * 1e-9
     println("Simulated ", t[k], " seconds in ", run_time, " seconds (", t[k]/run_time, "× real time).")
 
+    return scenario
 end
 
 # We can simulate a whole scenario directly from the file name.
 function simulate(file_name::String, context = current_module())
-    simulate(setup(Scenario(), file_name, context))
+    return simulate(setup(Scenario(), file_name, context))
+end
+
+# Enable do-block syntax for the progress function.
+# TODO: Remove the progress_fcn field from scenario?
+function simulate(progress_fcn::Function, file_name::String, context = current_module())
+    scenario = setup(Scenario(), file_name, context)
+    scenario.sim.progress_fcn = progress_fcn
+    return simulate(scenario)
+end
+
+# Enable do-block syntax for the progress function.
+# TODO: Remove the progress_fcn field from scenario?
+function simulate(progress_fcn::Function, scenario::Scenario)
+    scenario.sim.progress_fcn = progress_fcn
+    return simulate(scenario)
 end
 
 # Bring the states from t_{k-1} to t_k.

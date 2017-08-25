@@ -35,7 +35,6 @@ export Body, Software, DiscreteSensor, DiscreteActuator
 export Earth
 export TruthSensor, StarTracker, Gyro
 export IdealActuator
-export StarTrackerAndGyroController
 
 export setup, simulate
 export Scenario, SimParams

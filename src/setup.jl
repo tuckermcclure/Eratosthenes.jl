@@ -3,6 +3,9 @@ function Base.convert(::Type{Matrix{T}}, d::Vector{Vector{T}}) where {T}
     return hcat(d...)
 end
 
+setup(file_name::String) = setup(Scenario(), file_name);
+setup(specs::Dict)       = setup(Scenario(), specs);
+
 # Create a function to turn a JSON file name into a dictionary and then load that dictionary.
 function setup(model, file_name::String, context::Module = current_module())
     println("Loading scenario specifications from '$file_name' in $context.")

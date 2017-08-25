@@ -29,5 +29,6 @@ vehicles:
             dt: 0.05
       software:
           - model: StarTrackerAndGyroController
-            constants: [0., 1., 0., 0.] # Target orientation
+            constants:
+                target: [0., 1., 0., 0.] # Target orientation
             dt: 0.05
