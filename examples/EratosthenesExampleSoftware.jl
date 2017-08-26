@@ -106,11 +106,6 @@ function StarTrackerAndGyroController()
             f_B = [f_B_tuple...]
             τ_B = [τ_B_tuple...]
 
-            # TODO: We need a tidyup function!
-            if t >= 60.
-                udp_send(constants.conn, 0, gains, q_TI, q_BI, ω_BI_B)
-            end
-
         else
             error("Unknown mode.")
         end
@@ -122,9 +117,20 @@ function StarTrackerAndGyroController()
 
     end
 
+    # Tell the target that we're done, and then close the socket.
+    function shutdown(t, constants, state)
+        println("Shutting down the StarTrackerAndGyroController.")
+        if constants.mode == pitl
+            # Send a status of 0 to indicate that things are over now.
+            udp_send(constants.conn, 0)
+            udp_close(constants.conn)
+        end
+    end
+
     Software("star_tracker_and_gyro_controller",
              init,
              step,
+             shutdown,
              0.05,      # Sample rate
              0.,        # Next trigger time
              constants,

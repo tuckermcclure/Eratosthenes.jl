@@ -67,3 +67,18 @@ q     = normalize(scenario.vehicles[1].body.state.q_BI)
 # How'd we do?
 @test Δθ < 1e-12
 @test norm(Δω) < 1e-12
+
+###########
+# Example #
+###########
+
+success = false;
+try
+    include(joinpath(Pkg.dir("Eratosthenes"), "examples", "1_quick_start", "run-min-scenario.jl"))
+    success = true;
+catch err
+    println("There was an error running the basic example.")
+    rethrow(err)
+end
+
+@test success == true

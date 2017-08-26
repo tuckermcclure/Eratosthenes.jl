@@ -33,6 +33,7 @@ function IdealPDController()
     Software("ideal_pd_controller",
              init,
              step,
+             nothing, # shutdown
              0.05,
              0.,
              [0.; 0.; 0.; 1.], # constants: just a target quaternion

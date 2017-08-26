@@ -31,6 +31,7 @@ function IdealActuator()
                      nothing, # step
                      nothing, # sense
                      actuate,
+                     nothing, # shutdown
                      0.01,    # time step
                      0.,      # start time
                      nothing, # constants

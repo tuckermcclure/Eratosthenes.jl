@@ -81,6 +81,7 @@ function Body()
          init,
          derivatives,
          step,
+         nothing, # shutdown
          0.01,    # maximum-allowable time step
          0.,      # start time
          BodyConstants(50., 5.*eye(3), [0., 0., 0.]),

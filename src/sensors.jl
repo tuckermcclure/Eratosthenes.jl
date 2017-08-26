@@ -16,6 +16,7 @@ function TruthSensor()
                    init,
                    nothing, # step
                    sense,
+                   nothing, # shutdown
                    0.02,    # time step
                    0.,      # start time
                    nothing, # constants
@@ -42,6 +43,7 @@ function StarTracker()
                    init,
                    nothing, # state
                    sense,
+                   nothing, # shutdown
                    0.1,     # 10Hz update rate
                    0.,      # begins measuring at t=0
                    [0.001, 0.001, 0.001], # constants: error magnitudes (rad)
@@ -93,6 +95,7 @@ function Gyro()
                    init,
                    step,
                    sense,
+                   nothing, # shutdown
                    0.01,
                    0.,
                    GyroConstants(0.00001, 0.0001, 0.001),

@@ -76,6 +76,7 @@ mutable struct DynamicalModel
     step::Union{Function,Void} # "Update yourself for this time step."
     sense::Union{Function,Void} # "Product your measurement."
     actuate::Union{Function,Void} # "Produce forces."
+    shutdown::Union{Function,Void} # Called when the sim ends, even when there's an error.
     dt::Float64
     t_next::Float64
     constants::Any # This will be set up during setup and will never change afterwards.
@@ -84,16 +85,16 @@ mutable struct DynamicalModel
 end
 
 # Convenience constructors
-Body(name, init, derivatives, step, dt, t_next, constants, state, rand = RandSpec()) =
-    DynamicalModel(name, init, derivatives, step, nothing, nothing, dt, t_next, constants, state, rand)
-DiscreteSensor(name, init, step, measure, dt, t_next, constants = nothing, state = nothing, rand = RandSpec()) =
-    DynamicalModel(name, init, nothing, step, measure, nothing, dt, t_next, constants, state, rand)
-DiscreteActuator(name, init, step, measure, actuate, dt, t_next, constants = nothing, state = nothing, rand = RandSpec()) =
-    DynamicalModel(name, init, nothing, step, measure, actuate, dt, t_next, constants, state, rand)
-Software(name, init, step, dt, t_next, constants, state) =
-    DynamicalModel(name, init, nothing, step, nothing, nothing, dt, t_next, constants, state, nothing)
-ConstantModel(name, init, constants, rand = RandSpec()) =
-    DynamicalModel(name, init, nothing, nothing, nothing, nothing, 0., 0., constants, 0., rand) # Use for planet?
+Body(name, init, derivatives, step, shutdown, dt, t_next, constants, state, rand = RandSpec()) =
+    DynamicalModel(name, init, derivatives, step, nothing, nothing, shutdown, dt, t_next, constants, state, rand)
+DiscreteSensor(name, init, step, measure, shutdown, dt, t_next, constants = nothing, state = nothing, rand = RandSpec()) =
+    DynamicalModel(name, init, nothing, step, measure, nothing, shutdown, dt, t_next, constants, state, rand)
+DiscreteActuator(name, init, step, measure, actuate, shutdown, dt, t_next, constants = nothing, state = nothing, rand = RandSpec()) =
+    DynamicalModel(name, init, nothing, step, measure, actuate, shutdown, dt, t_next, constants, state, rand)
+Software(name, init, step, shutdown, dt, t_next, constants, state) =
+    DynamicalModel(name, init, nothing, step, nothing, nothing, shutdown, dt, t_next, constants, state, nothing)
+ConstantModel(name, init, shutdown, constants, rand = RandSpec()) =
+    DynamicalModel(name, init, nothing, nothing, nothing, nothing, shutdown, 0., 0., constants, 0., rand) # Use for planet?
 
 # Include the other code, from smallest thing to biggest thing.
 include("sensors.jl")

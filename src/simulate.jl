@@ -298,16 +298,47 @@ function simulate(scenario::Scenario)
     catch err
 
         # The sim stops upon receiving ctrl+c (ctrl+shift+c in Juno). That's not
-        # really an error. All other errors are though.
+        # really an error. All other errors really are errors though.
         if isa(err, InterruptException)
             println("Stopping sim due to user interrupt.")
+            if k > 1; k -= 1; end # The last step completed was k-1.
         else
             rethrow(err)
         end
 
-
-    # Close the log file no matter what.
+    # No matter what happens, we want to shut down when the sim has stopped
+    # (either completed or errored out) so that we can tidy up resources.
     finally
+
+        ############
+        # Shutdown #
+        ############
+
+        # Shut down each vehicle first.
+        for vehicle in scenario.vehicles
+            if isa(vehicle.body.shutdown, Function)
+                vehicle.body.shutdown(t[k], vehicle.body.constants, vehicle.body.state)
+            end
+        end
+
+        # Now initialize each vehicle's subsystems
+        for vehicle in scenario.vehicles
+            for sensor in vehicle.sensors
+                if isa(sensor.shutdown, Function)
+                    sensor.shutdown(t[k], sensor.constants, sensor.state)
+                end
+            end
+            for software in vehicle.software
+                if isa(software.shutdown, Function)
+                    software.shutdown(t[k], software.constants, software.state)
+                end
+            end
+            for actuator in vehicle.actuators
+                if isa(actuator.shutdown, Function)
+                    actuator.shutdown(t[k], actuator.constants, actuator.state)
+                end
+            end
+        end
 
         # Close the log.
         if log != nothing

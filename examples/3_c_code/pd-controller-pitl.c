@@ -44,14 +44,12 @@ int main(void)
         bytes_received = udp_receive(&comms);
         printf("Received %d bytes.\n", bytes_received);
         udp_pull(&comms, &status, sizeof(status));
+        if (status <= 0) { break; } /* See if we should quit. */
         udp_pull(&comms, gains,   sizeof(gains));
         udp_pull(&comms, q_TI,    sizeof(q_TI));
         udp_pull(&comms, q_BI,    sizeof(q_BI));
         udp_pull(&comms, w_BI_B,  sizeof(w_BI_B));
         printf("w1=%5.2f, w2=%5.2f, w3=%5.2f\n", w_BI_B[0], w_BI_B[1], w_BI_B[2]);
-
-        /* See if we should quit. */
-        if (status <= 0) { break; }
 
         /* Run the target code. */
         pd_controller(gains, q_TI, q_BI, w_BI_B, f_B, tau_B);
