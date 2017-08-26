@@ -46,12 +46,13 @@ function StarTrackerAndGyroController()
     constants = StarTrackerAndGyroControllerConstants(
                     [0.; 0.; 0.; 1.], # Target quaternion
                     jitl,             # Default operation mode
-                    UDPConnection(ip"192.168.1.195", 2000, 2001))
+                    UDPConnection(ip"192.168.1.3", 2000, 2001))
 
     # This function initializes any dependencies and provides initial "inputs"
     # and "outputs".
     function init(t, constants, state, args...)
         if constants.mode == pitl
+            println("Connecting to remote computer.")
             udp_connect(constants.conn)
         end
         return (state,
@@ -69,7 +70,7 @@ function StarTrackerAndGyroController()
         ω_BI_B = measurements["gyro"]
         q_BI   = measurements["star_tracker"]
         q_TI   = constants.target
-        gains  = [0.2, 2.]
+        gains  = [0.2; 2.]
 
         # Run the algorithm under development, the C version, or the C version
         # when running on the flight computer.
@@ -93,13 +94,16 @@ function StarTrackerAndGyroController()
         elseif constants.mode == pitl
 
             # Send over the status and other inputs to the flight software.
-            status    = 1
-            f_B_tuple = (0., 0., 0.)
-            τ_B_tuple = (0., 0., 0.)
-            udp_send(constants.conn, status, gains, q_TI, q_BI, ω_BI_B)
+            udp_send(constants.conn, 1, gains, q_TI, q_BI, ω_BI_B)
+
+            # Give it just a moment to respond. (Sometimes it gets stuck if it
+            # goes to receive too soon.)
+            sleep(0.001)
 
             # Wait for the data to arrive. The inputs here serve as examples for
-            # the functino, enabling it to know how to write to the outputs.
+            # the function, enabling it to know how to write to the outputs.
+            f_B_tuple = (0., 0., 0.)
+            τ_B_tuple = (0., 0., 0.)
             f_B_tuple, τ_B_tuple = udp_receive(constants.conn, f_B_tuple, τ_B_tuple)
 
             # Expand the tuples into vectors.

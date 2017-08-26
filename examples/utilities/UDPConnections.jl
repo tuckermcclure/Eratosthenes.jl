@@ -72,7 +72,7 @@ udp_send(conn, var1, var2, varn)
 function udp_send(conn::UDPConnection, args...)
     # TCP equivalent
     # write(conn.sock, Ref(args))
-    raw = vcat(map(a -> reinterpret(UInt8, [a]), args)...)
+    raw = vcat(map(a -> reinterpret(UInt8, isa(a, Array) ? a : [a]), args)...)
     send(conn.sock, conn.target_ip, conn.send_port, raw)
 end
 
