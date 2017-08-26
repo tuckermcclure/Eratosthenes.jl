@@ -12,7 +12,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include "../utilities/udp-helper.h"
+#include "../utilities/udp-helper/udp-helper.h"
 
 #include "pd-controller.h"
 

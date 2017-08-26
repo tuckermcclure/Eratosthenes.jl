@@ -25,7 +25,7 @@
 #include <sys/socket.h>
 #include <string.h>
 #include <unistd.h>
-#include <byteswap.h>
+/*#include <byteswap.h>*/
 #include "udp-helper.h"
 
 /* Create a UDPHelper. */
