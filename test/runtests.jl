@@ -37,6 +37,7 @@ function Constorquer()
                      nothing,
                      nothing,
                      actuate,
+                     nothing,
                      0.01,
                      0.,
                      [2.; 0.; 0.], # Torque (must be about principal axis)
