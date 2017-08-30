@@ -75,7 +75,7 @@ q     = normalize(scenario.vehicles[1].body.state.q_BI)
 
 success = false;
 try
-    include(joinpath(Pkg.dir("Eratosthenes"), "examples", "1_quick_start", "run-min-scenario.jl"))
+    include("run-min-scenario-ci.jl")
     success = true;
 catch err
     println("There was an error running the basic example.")
