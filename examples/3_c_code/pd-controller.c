@@ -28,6 +28,7 @@ double q2aa(const double q[4], double r[3])
     double half_theta = 0.;
     double theta = 0.;
     double one_over_sin_half_theta = 0.;
+    double r_mag = 0.;
     int k = 0;
     half_theta = q[3];
     if (half_theta >  1.) { half_theta =  1.; };
@@ -40,6 +41,12 @@ double q2aa(const double q[4], double r[3])
         for (k = 0; k <= 2; ++k)
         {
             r[k] = q[k] * one_over_sin_half_theta;
+            r_mag += r[k] * r[k];
+        }
+        r_mag = sqrt(r_mag);
+        for (k = 0; k <= 2; ++k)
+        {
+            r[k] /= r_mag;
         }
     }
     else

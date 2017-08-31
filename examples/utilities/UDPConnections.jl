@@ -2,7 +2,7 @@ module UDPConnections
 
 export UDPConnection, udp_connect, udp_send, udp_receive, udp_close
 
-struct UDPConnection
+mutable struct UDPConnection
     sock::UDPSocket
     target_ip::IPv4
     send_port::Int
@@ -18,9 +18,6 @@ Don't forget to close it with `udp_close(conn)` or `close(conn.sock)`!
 function UDPConnection(target_ip::IPv4 = ip"127.0.0.1", send_port::Int = 2000, receive_port::Int = 2001)
     return UDPConnection(UDPSocket(), target_ip, send_port, receive_port)
 end
-# function UDPConnection(sock::UDPSocket = UDPSocket(), target_ip::IPv4 = ip"127.0.0.1", send_port::Int = 2000, receive_port::Int = 2001)
-#     return UDPConnection(sock, target_ip, send_port, receive_port)
-# end
 
 """
     udp_connect

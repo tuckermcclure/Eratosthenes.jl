@@ -8,7 +8,7 @@ import Juno # For the progress bar
 
 # Create a Juno waitbar. This do-block syntax makes sure it gets "closed" even
 # if there's an error.
-Juno.progress(name="Simulating...") do progress_bar
+scenario = Juno.progress(name="Simulating...") do progress_bar
 
     # Run the simulation. Anything inside this do-block will be run at the
     # beginning of every major time step. This is useful for updating a progress

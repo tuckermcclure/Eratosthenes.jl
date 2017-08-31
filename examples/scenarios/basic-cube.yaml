@@ -3,7 +3,7 @@ sim:
     t_end: 60.
     seed: 2
     date_0: [2017, 6, 29, 17, 6, 32.2]
-    log_file: out/my_log.h5
+    log_file: out/basic-cube.h5
 planet:
     model: Earth
 vehicles:

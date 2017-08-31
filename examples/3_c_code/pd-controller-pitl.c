@@ -18,11 +18,14 @@
 
 int main(void)
 {
+    /* UDP communication stuff */
     UDPHelper comms;
-    const char * target_ip_address = "127.0.0.1"; /* Dummy; we're respond to whomever talks to us first. */
-    int listen_port = 2000;
-    int target_port = 2001;
-    int respond_to_sender = 1;
+    const char * target_ip_address = "127.0.0.1"; /* Dummy; we'll respond to whomever talks to us first. */
+    const int listen_port = 2000;
+    const int target_port = 2001;
+    const int respond_to_sender = 1;
+
+    /* Inputs and outputs */
     uint64_t status = 0;
     double gains[2]  = {0., 0.};
     double q_TI[4]   = {0., 0., 0., 0.};
@@ -30,6 +33,8 @@ int main(void)
     double w_BI_B[3] = {0., 0., 0.};
     double f_B[3]    = {0., 0., 0.};
     double tau_B[3]  = {0., 0., 0.};
+
+    /* Bookkeeping */
     int bytes_received = 0;
     int bytes_sent = 0;
 
@@ -61,6 +66,7 @@ int main(void)
         printf("Sent %d bytes.\n", bytes_sent);
     }
 
+    /* Tidy up. */
     udp_close(&comms);
     printf("Done.\n");
     return 0;

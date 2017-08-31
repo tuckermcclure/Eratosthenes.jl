@@ -30,10 +30,14 @@ mutable struct StarTrackerAndGyroControllerConstants
     target::Vector{Float64}
     mode::StarTrackerAndGyroControllerMode
     conn::UDPConnection
+    c_lib::Ptr{Void}
+    c_fcn::Ptr{Void}
     StarTrackerAndGyroControllerConstants(target = [0.; 0.; 0.; 1.],
                                           mode   = jitl,
-                                          conn   = UDPConnection()) =
-                                         new(target, mode, conn)
+                                          conn   = UDPConnection(),
+                                          c_lib  = Ptr{Void}(0),
+                                          c_fcn  = Ptr{Void}(0)) =
+                                         new(target, mode, conn, c_lib, c_fcn)
 end
 
 """
@@ -51,7 +55,14 @@ function StarTrackerAndGyroController()
     # This function initializes any dependencies and provides initial "inputs"
     # and "outputs".
     function init(t, constants, state, args...)
-        if constants.mode == pitl
+        if constants.mode == sitl
+            if is_windows()
+                constants.c_lib = Libdl.dlopen("3_c_code/windows/lib-pd-controller.dll")
+            else
+                constants.c_lib = Libdl.dlopen("3_c_code/linux/lib-pd-controller.so")
+            end
+            constants.c_fcn = Libdl.dlsym(constants.c_lib, :pd_controller)
+        elseif constants.mode == pitl
             println("Connecting to remote computer.")
             udp_connect(constants.conn)
         end
@@ -85,7 +96,7 @@ function StarTrackerAndGyroController()
             # function.
             f_B   = [0.; 0.; 0.]
             τ_B   = [0.; 0.; 0.]
-            ccall((:pd_controller, "3_c_code/windows/lib-pd-controller"),
+            ccall(constants.c_fcn,
                   Void,
                   (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}),
                   gains, q_TI, q_BI, ω_BI_B, f_B, τ_B);
@@ -94,14 +105,16 @@ function StarTrackerAndGyroController()
         elseif constants.mode == pitl
 
             # Send over the status and other inputs to the flight software.
+            println("Sending...")
             udp_send(constants.conn, 1, gains, q_TI, q_BI, ω_BI_B)
 
             # Give it just a moment to respond. (Sometimes it gets stuck if it
             # goes to receive too soon.)
-            sleep(0.001)
+            sleep(0.005)
 
             # Wait for the data to arrive. The inputs here serve as examples for
             # the function, enabling it to know how to write to the outputs.
+            println("Receiving...")
             f_B_tuple = (0., 0., 0.)
             τ_B_tuple = (0., 0., 0.)
             f_B_tuple, τ_B_tuple = udp_receive(constants.conn, f_B_tuple, τ_B_tuple)
@@ -124,7 +137,9 @@ function StarTrackerAndGyroController()
     # Tell the target that we're done, and then close the socket.
     function shutdown(t, constants, state)
         println("Shutting down the StarTrackerAndGyroController.")
-        if constants.mode == pitl
+        if constants.mode == sitl
+            Libdl.dlclose(constants.c_lib)
+        elseif constants.mode == pitl
             # Send a status of 0 to indicate that things are over now.
             udp_send(constants.conn, 0)
             udp_close(constants.conn)

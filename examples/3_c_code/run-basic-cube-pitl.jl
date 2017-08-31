@@ -18,12 +18,12 @@ using .EratosthenesExampleSoftware
 scenario = setup("scenarios/basic-cube.yaml")
 
 # Set up PITL.
+scenario.sim.log_file = "out/basic-cube-pitl.h5"
 software_options = scenario.vehicles[1].software[1].constants;
 software_options.mode              = EratosthenesExampleSoftware.pitl
-# software_options.conn.target_ip    = ip"192.168.1.3"
-# software_options.conn.send_port    = 2000
-# software_options.conn.receive_port = 2001
-# software_options.conn = EratosthenesExampleSoftware.UDPConnection(ip"192.168.1.3", 2000, 2001)
+software_options.conn.target_ip    = ip"192.168.1.3"
+software_options.conn.send_port    = 2000
+software_options.conn.receive_port = 2001
 
 # Create a Juno waitbar. This do-block syntax makes sure it gets "closed" even
 # if there's an error.

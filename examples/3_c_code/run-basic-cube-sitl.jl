@@ -18,6 +18,7 @@ using .EratosthenesExampleSoftware
 scenario = setup("scenarios/basic-cube.yaml")
 
 # Set up SITL.
+scenario.sim.log_file = "out/basic-cube-sitl.h5"
 scenario.vehicles[1].software[1].constants.mode = EratosthenesExampleSoftware.sitl
 
 # Create a Juno waitbar. This do-block syntax makes sure it gets "closed" even
