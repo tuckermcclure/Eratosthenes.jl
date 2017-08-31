@@ -110,7 +110,7 @@ function StarTrackerAndGyroController()
 
             # Give it just a moment to respond. (Sometimes it gets stuck if it
             # goes to receive too soon.)
-            sleep(0.005)
+            sleep(0.001)
 
             # Wait for the data to arrive. The inputs here serve as examples for
             # the function, enabling it to know how to write to the outputs.
