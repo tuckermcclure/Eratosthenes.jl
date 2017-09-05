@@ -1,3 +1,6 @@
+# Run JITL, SITL, and PITL first to generate their logs. Then run this script to
+# compare them.
+
 module Temp
 
 using Plots

@@ -1,4 +1,4 @@
-mutable struct BodyConstants{T} <: ModelConstants where {T <: Real}
+mutable struct BodyConstants{T <: Real}
     m::T # Mass
     I_B::Matrix{T} # Central mass moment of inertia in body coordinates
     r_mb_B::Vector{T} # Position of center of mass wrt body reference point in body coordinates
@@ -11,7 +11,7 @@ mutable struct BodyState{T} <: ModelState where {T <: Real}
     ω_BI_B::Vector{T} # Rotation rate of body frame wrt ICRF, in body coordinates
 end
 
-mutable struct BodyTruth{T} <: ModelTruth where {T <: Real}
+mutable struct BodyTruth{T <: Real}
     r_me_I::Vector{T} # Position of center of mass wrt center of mass of earth in ICRF's coordinates
     v_me_I::Vector{T} # Rate of change of above (as viewed from the inertia frame)
     q_BI::Vector{T}   # Attitude quaternion of body frame wrt ICRF

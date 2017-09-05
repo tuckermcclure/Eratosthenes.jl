@@ -1,5 +1,5 @@
 sim:
-    dt: 0.05
+    dt: 0.02
     t_end: 60.
     seed: 2
     date_0: [2017, 6, 29, 17, 6, 32.2]
@@ -20,7 +20,7 @@ vehicles:
       sensors:
           - model: StarTracker
             name: star_tracker
-            dt: 0.05
+            dt: 0.1
           - model: Gyro
             name: gyro
             dt: 0.05
