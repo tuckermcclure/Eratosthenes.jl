@@ -113,20 +113,20 @@ mutable struct DynamicalModel
     rand::RandSpec # Provide the properties of the random number generator stream you'll need.
     t_next::Float64
     count::Int64 # Total number of times this model has triggered
-    final_count::Int64 # Total number of times this model will trigger
+    # final_count::Int64 # Total number of times this model will trigger
 end
 
 # Convenience constructors
 Body(name, init, derivatives, step, shutdown, dt, t_start, constants, state, rand = RandSpec()) =
-    DynamicalModel(name, init, derivatives, step, nothing, nothing, shutdown, dt, t_start, constants, state, rand, 0., 0, 0)
+    DynamicalModel(name, init, derivatives, step, nothing, nothing, shutdown, dt, t_start, constants, state, rand, 0., 0)
 DiscreteSensor(name, init, step, measure, shutdown, dt, t_start, constants = nothing, state = nothing, rand = RandSpec()) =
-    DynamicalModel(name, init, nothing, step, measure, nothing, shutdown, dt, t_start, constants, state, rand, 0., 0, 0)
+    DynamicalModel(name, init, nothing, step, measure, nothing, shutdown, dt, t_start, constants, state, rand, 0., 0)
 DiscreteActuator(name, init, step, measure, actuate, shutdown, dt, t_start, constants = nothing, state = nothing, rand = RandSpec()) =
-    DynamicalModel(name, init, nothing, step, measure, actuate, shutdown, dt, t_start, constants, state, rand, 0., 0, 0)
+    DynamicalModel(name, init, nothing, step, measure, actuate, shutdown, dt, t_start, constants, state, rand, 0., 0)
 Software(name, init, step, shutdown, dt, t_start, constants, state) =
-    DynamicalModel(name, init, nothing, step, nothing, nothing, shutdown, dt, t_start, constants, state, nothing, 0., 0, 0)
+    DynamicalModel(name, init, nothing, step, nothing, nothing, shutdown, dt, t_start, constants, state, nothing, 0., 0)
 ConstantModel(name, init, shutdown, constants, rand = RandSpec()) =
-    DynamicalModel(name, init, nothing, nothing, nothing, nothing, shutdown, 0., 0., constants, 0., rand, 0., 0, 0) # Use for planet?
+    DynamicalModel(name, init, nothing, nothing, nothing, nothing, shutdown, 0., 0., constants, 0., rand, 0., 0) # Use for planet?
 
 # Include the other code, from smallest thing to biggest thing.
 include("sensors.jl")

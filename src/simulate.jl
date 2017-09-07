@@ -86,15 +86,35 @@ function simulate(scenario::Scenario)
         end
     end
 
+    # Timing slop. Discrete processes will occur when they're within this amount of
+    # time from when they're supposed to happen.
+    ϵ = eps(10 * scenario.sim.t_end)
+
     # Make the time history.
     if !isempty(dts)
-        t, counts, ϵ = calculate_time_steps(scenario.sim.t_end, scenario.sim.dt, dts, t_starts)
+
+        # Get the complete set of sample times.
+        t, = calculate_time_steps(scenario.sim.t_end, scenario.sim.dt, dts, t_starts, ϵ)
+
+        # # Use the `counts` to fill in `final_count`. (Nevermind, we'll just
+        # # calculate it below.)
+        # for vehicle in scenario.vehicles
+        #     for sensor in vehicle.sensors
+        #         sensor.final_count = shift!(counts)
+        #     end
+        #     for software in vehicle.software
+        #         software.final_count = shift!(counts)
+        #     end
+        #     for actuator in vehicle.actuators
+        #         actuator.final_count = shift!(counts)
+        #     end
+        # end
+
     else
         t = collect(0.:scenario.sim.dt:scenario.sim.t_end)
         if t[end] != scenario.sim.t_end # Stop at exactly the end time.
             push!(t, senario.sim.t_end)
         end
-        ϵ = eps(10 * scenario.sim.dt:scenario.sim.t_end)
     end
     nt = length(t) # Total number of steps to take
 
@@ -156,7 +176,7 @@ function simulate(scenario::Scenario)
         end
 
         ############
-        # Sim Init #
+        # Log Init #
         ############
 
         # Preallocate space for the streams will need in the logger.
@@ -172,8 +192,11 @@ function simulate(scenario::Scenario)
                 # Set up the streams for the sensors.
                 for sensor in filter(s -> s.sense != nothing, vehicle.sensors)
                     slug = "/" * vehicle.name * "/measurements/" * sensor.name * "/"
-                    num_samples = Int64(floor((scenario.sim.t_end - sensor.t_start) / sensor.dt)) + 1 # TODO: Use `counts` here.
+                    num_samples = Int64(floor((scenario.sim.t_end - sensor.t_start) / sensor.dt)) + 1
                     add!(log, slug, t[1], measurements[vehicle.name][sensor.name], num_samples)
+                end
+
+                for software in vehicle.software
                 end
 
                 # Set up the streams for the actuators.
@@ -323,6 +346,8 @@ function simulate(scenario::Scenario)
         end
 
     catch err
+
+        # TODO: Tidy up logs (get rid of unused preallocated space).
 
         # The sim stops upon receiving ctrl+c (ctrl+shift+c in Juno). That's not
         # really an error. All other errors really are errors though.
@@ -520,16 +545,12 @@ function continuous(t, states, scenario, commands)
 
 end
 
-function calculate_time_steps(tf::Float64, dt::Float64, dts::Vector{Float64}, t_start::Vector{Float64})
+function calculate_time_steps(tf::Float64, dt::Float64, dts::Vector{Float64}, t_start::Vector{Float64}, ϵ::Float64)
 
     t      = 0.
     ts     = Vector{Float64}() # array for time steps
     ndst   = copy(t_start) # next discrete sample times
-    counts = zero(dts) # how many times each discrete process has triggered
-
-    # Timing slop. Discrete processes will occur when they're within this amount of
-    # time from when they're supposed to happen.
-    ϵ = eps(10*tf)
+    counts = zeros(Float64, length(dts)) # how many times each discrete process has triggered
 
     # We can't need more than the sum of each process triggering on its own.
     # Create a counter so that, when it completes, we bail with an error.
@@ -576,5 +597,5 @@ function calculate_time_steps(tf::Float64, dt::Float64, dts::Vector{Float64}, t_
 
     end
 
-    return (ts, counts, ϵ)
+    return (ts, counts)
 end
