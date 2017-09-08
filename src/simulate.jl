@@ -1,4 +1,4 @@
-# Customized logging function for whole structures.
+# add! a whole structure to the log.
 function add!(log::HDF5Logger.Log, slug::String, t::Real, data, n::Int)
     function add_structured!(log, slug, data, n)
         if isbits(data) || (isa(data, Array) && isbits(eltype(data)))
@@ -13,6 +13,7 @@ function add!(log::HDF5Logger.Log, slug::String, t::Real, data, n::Int)
     add_structured!(log, slug * "data", data, n)
 end
 
+# log! a whole structure.
 function log!(log::HDF5Logger.Log, slug::String, t::Real, data)
     function log_structured!(log, slug, data,)
         if isbits(data) || (isa(data, Array) && isbits(eltype(data)))
@@ -64,13 +65,56 @@ function simulate(scenario::Scenario)
         for actuator in vehicle.actuators; seed(actuator.rand); end;
     end
 
+    # Get all of the discrete time steps and start times.
+    dts      = Vector{Float64}()
+    t_starts = Vector{Float64}()
+    for vehicle in scenario.vehicles
+        for sensor in vehicle.sensors
+            push!(dts, sensor.dt)
+            push!(t_starts, sensor.t_start)
+            sensor.t_next = sensor.t_start
+        end
+        for software in vehicle.software
+            push!(dts, software.dt)
+            push!(t_starts, software.t_start)
+            software.t_next = software.t_start
+        end
+        for actuator in vehicle.actuators
+            push!(dts, actuator.dt)
+            push!(t_starts, actuator.t_start)
+            actuator.t_next = actuator.t_start
+        end
+    end
+
+    # Timing slop. Discrete processes will occur when they're within this amount of
+    # time from when they're supposed to happen.
+    ϵ = eps(10 * scenario.sim.t_end)
+
     # Make the time history.
-    #
-    # TODO: For now, the simulation always takes a step of dt, but it should
-    # step only to the next discrete break (or dt, whichever is less).
-    t = collect(0.:scenario.sim.dt:scenario.sim.t_end)
-    if t[end] != scenario.sim.t_end # Stop at exactly the end time.
-        t = [t senario.sim.t_end]
+    if !isempty(dts)
+
+        # Get the complete set of sample times.
+        t, = calculate_time_steps(scenario.sim.t_end, scenario.sim.dt, dts, t_starts, ϵ)
+
+        # # Use the `counts` to fill in `final_count`. (Nevermind, we'll just
+        # # calculate it below.)
+        # for vehicle in scenario.vehicles
+        #     for sensor in vehicle.sensors
+        #         sensor.final_count = shift!(counts)
+        #     end
+        #     for software in vehicle.software
+        #         software.final_count = shift!(counts)
+        #     end
+        #     for actuator in vehicle.actuators
+        #         actuator.final_count = shift!(counts)
+        #     end
+        # end
+
+    else
+        t = collect(0.:scenario.sim.dt:scenario.sim.t_end)
+        if t[end] != scenario.sim.t_end # Stop at exactly the end time.
+            push!(t, senario.sim.t_end)
+        end
     end
     nt = length(t) # Total number of steps to take
 
@@ -132,7 +176,7 @@ function simulate(scenario::Scenario)
         end
 
         ############
-        # Sim Init #
+        # Log Init #
         ############
 
         # Preallocate space for the streams will need in the logger.
@@ -141,23 +185,26 @@ function simulate(scenario::Scenario)
             println("Setting up log.")
             for vehicle in scenario.vehicles
 
+                # Set up the streams for the vehicle's truth.
+                slug = "/" * vehicle.name * "/truth/"
+                add!(log, slug, t[1], truth[vehicle.name], nt)
+
                 # Set up the streams for the sensors.
                 for sensor in filter(s -> s.sense != nothing, vehicle.sensors)
                     slug = "/" * vehicle.name * "/measurements/" * sensor.name * "/"
-                    num_samples = Int64(floor(scenario.sim.t_end / sensor.dt)) + 1
+                    num_samples = Int64(floor((scenario.sim.t_end - sensor.t_start) / sensor.dt)) + 1
                     add!(log, slug, t[1], measurements[vehicle.name][sensor.name], num_samples)
+                end
+
+                for software in vehicle.software
                 end
 
                 # Set up the streams for the actuators.
                 for actuator in filter(a -> a.sense != nothing, vehicle.actuators)
                     slug = "/" * vehicle.name * "/measurements/" * actuator.name * "/"
-                    num_samples = Int64(floor(scenario.sim.t_end / actuator.dt)) + 1
+                    num_samples = Int64(floor((scenario.sim.t_end - actuator.t_start) / actuator.dt)) + 1
                     add!(log, slug, t[1], measurements[vehicle.name][actuator.name], num_samples)
                 end
-
-                # Set up the streams for the vehicle's truth.
-                slug = "/" * vehicle.name * "/truth/"
-                add!(log, slug, t[1], truth[vehicle.name], nt)
 
             end
 
@@ -167,7 +214,7 @@ function simulate(scenario::Scenario)
         # Sim Loop #
         ############
 
-        # TODO: Replace with a while and look for the next break time.
+        # Loop over each index of the time array.
         for k = 1:nt
 
             # Update the progress bar.
@@ -185,7 +232,7 @@ function simulate(scenario::Scenario)
             if k > 1
 
                 # Propagate the continuous-time stuff to the current time.
-                propagate!(t[k-1], t[k], scenario, truth, commands)
+                propagate!(t[k-1], t[k], scenario, truth, commands, ϵ)
 
             end
 
@@ -205,7 +252,7 @@ function simulate(scenario::Scenario)
                 ###########
 
                 # Update any sensor whose t_next has come.
-                for sensor in filter(s -> t[k] >= s.t_next, vehicle.sensors)
+                for sensor in filter(s -> t[k] >= s.t_next - ϵ, vehicle.sensors)
 
                     # Update the state and get the measurement.
                     if sensor.sense != nothing
@@ -227,12 +274,13 @@ function simulate(scenario::Scenario)
                     end
 
                     # Update the next sample time.
-                    sensor.t_next += sensor.dt
+                    sensor.count  += 1
+                    sensor.t_next = sensor.dt * sensor.count + sensor.t_start
 
                 end # each sensor
 
                 # Update any actuator whose t_next has come.
-                for actuator in filter(a -> t[k] >= a.t_next, vehicle.actuators)
+                for actuator in filter(a -> t[k] >= a.t_next - ϵ, vehicle.actuators)
 
                     # Update the state and get the measurement.
                     if actuator.sense != nothing
@@ -254,7 +302,8 @@ function simulate(scenario::Scenario)
                     end
 
                     # Update the next sample time.
-                    actuator.t_next += actuator.dt
+                    actuator.count  += 1
+                    actuator.t_next = actuator.dt * actuator.count + actuator.t_start
 
                 end # each actuator
 
@@ -263,7 +312,7 @@ function simulate(scenario::Scenario)
                 ############
 
                 # Update any software whose t_next has come.
-                for software in filter(s -> t[k] >= s.t_next, vehicle.software)
+                for software in filter(s -> t[k] >= s.t_next - ϵ, vehicle.software)
 
                     # Update the state and get the measurement.
                     # Make this "next inputs, outputs, and command"?
@@ -281,7 +330,8 @@ function simulate(scenario::Scenario)
                                       commands[vehicle.name]) # It can write to anything on the command bus (and should be considered write-only).
 
                     # Update the next sample time.
-                    software.t_next += software.dt
+                    software.count  += 1
+                    software.t_next = software.dt * software.count + software.t_start
 
                     # # Log it.
                     # if isa(log, HDF5Logger.Log)
@@ -296,6 +346,8 @@ function simulate(scenario::Scenario)
         end
 
     catch err
+
+        # TODO: Tidy up logs (get rid of unused preallocated space).
 
         # The sim stops upon receiving ctrl+c (ctrl+shift+c in Juno). That's not
         # really an error. All other errors really are errors though.
@@ -375,7 +427,7 @@ function simulate(progress_fcn::Function, scenario::Scenario)
 end
 
 # Bring the states from t_{k-1} to t_k.
-function propagate!(t_km1, t_k, scenario, truth, commands)
+function propagate!(t_km1, t_k, scenario, truth, commands, ϵ)
 
     # Time step (s)
     dt = t_k - t_km1
@@ -415,7 +467,7 @@ function propagate!(t_km1, t_k, scenario, truth, commands)
     for vehicle in scenario.vehicles
 
         # Update any sensor whose t_next has come.
-        for sensor in filter(s -> s.step != nothing && t_k >= s.t_next, vehicle.sensors)
+        for sensor in filter(s -> s.step != nothing && t_k >= s.t_next - ϵ, vehicle.sensors)
 
             # Update the state and get the measurement.
             sensor.state =
@@ -432,7 +484,7 @@ function propagate!(t_km1, t_k, scenario, truth, commands)
         end # each sensor
 
         # Update any actuator whose t_next has come.
-        for actuator in filter(a -> a.step != nothing && t_k >= a.t_next, vehicle.actuators)
+        for actuator in filter(a -> a.step != nothing && t_k >= a.t_next - ϵ, vehicle.actuators)
 
             # Update the state and get the measurement.
             actuator.state =
@@ -491,4 +543,59 @@ function continuous(t, states, scenario, commands)
 
     return derivs
 
+end
+
+function calculate_time_steps(tf::Float64, dt::Float64, dts::Vector{Float64}, t_start::Vector{Float64}, ϵ::Float64)
+
+    t      = 0.
+    ts     = Vector{Float64}() # array for time steps
+    ndst   = copy(t_start) # next discrete sample times
+    counts = zeros(Float64, length(dts)) # how many times each discrete process has triggered
+
+    # We can't need more than the sum of each process triggering on its own.
+    # Create a counter so that, when it completes, we bail with an error.
+    count = Int64(tf / dt + sum(tf ./ dts))
+
+    # While we aren't already at the end of time...
+    while t < tf
+
+        # See if there's been a problem that's creating an infinite loop.
+        count -= 1
+        if count == 0
+            error("Maximum number of steps exhausted; something went wrong when calculating time steps.")
+        end
+
+        # Find the next discrete sample time.
+        tn = minimum(ndst)
+        tn = min(tn, tf) # Don't step past the end of time.
+
+        # See how many steps we'll need to take between now and then. Create
+        # evenly-spaced steps between the points.
+        Δt      = tn - t
+        n_steps = ceil((Δt-ϵ)/dt)
+        Δt_fit  = Δt / n_steps
+
+        # Add on the evenly-spaced steps, up to the next discrete step.
+        for k = 1:n_steps-1
+            t += Δt_fit
+            push!(ts, t) # Pushing each is better than vcating (no copies).
+        end
+
+        # Now add on the discrete step. (Doing this allows the step to occur
+        # right at count * dt and avoids the accumulation of roundoff error over
+        # time.
+        t = tn
+        push!(ts, t)
+
+        # Update the times for the next steps of each discrete process.
+        for k = 1:length(dts)
+            if t > ndst[k] - ϵ
+                counts[k] += 1
+                ndst[k] = counts[k] * dts[k] + t_start[k]
+            end
+        end
+
+    end
+
+    return (ts, counts)
 end

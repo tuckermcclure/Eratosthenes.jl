@@ -39,12 +39,12 @@ export IdealActuator
 export setup, simulate
 export Scenario, SimParams
 
-abstract type ModelConstants end # There's no real point to this.
+# abstract type ModelConstants end # There's no real point to this.
 abstract type ModelState end
-abstract type ModelRand end # What's the interface going to be here?
-abstract type ModelTruth end # What's this do? Truths could be immutable!
-abstract type ModelMeasurement end # Measurements should be immuatble too.
-abstract type ModelCommand end
+# abstract type ModelRand end # What's the interface going to be here?
+# abstract type ModelTruth end # What's this do? Truths could be immutable!
+# abstract type ModelMeasurement end # Measurements should be immuatble too.
+# abstract type ModelCommand end
 
 # Create a function to add together two ModelStates.
 function Base.:+(a::T, b::T) where {T <: ModelState}
@@ -69,6 +69,35 @@ include("rand.jl")
 include("physics.jl")
 include("setup.jl")
 
+# # Can we break up the big DynamicalModel into pieces? Does this add value?
+#
+# mutable struct ModelFunctions
+#     init::Union{Function,Void} # "Tell me what you produce."
+#     derivatives::Union{Function,Void} # "Tell me how the state is changing."
+#     step::Union{Function,Void} # "Update yourself for this time step."
+#     sense::Union{Function,Void} # "Product your measurement."
+#     actuate::Union{Function,Void} # "Produce forces."
+#     shutdown::Union{Function,Void} # Called when the sim ends, even when there's an error.
+# end
+#
+# mutable struct ModelTiming
+#     dt::Float64
+#     t_next::Float64
+#     t_start::Float64
+#     count::Int64 # Total number of times this model has triggered
+#     final_count::Int64 # Total number of times this model will trigger
+#     #triggered::Bool # True when this model triggers on a `step` and is then ready for a `sense`
+# end
+#
+# mutable struct DynamicalModel
+#     name::String # Actually used as a key in a dictionary, as well as for logging
+#     functions::ModelFunctions
+#     constants::Any # This will be set up during setup and will never change afterwards.
+#     state::Any # Bonus: return a ModelState to enable "struct addition and multiplication"
+#     rand::RandSpec # Provide the properties of the random number generator stream you'll need.
+#     timing::ModelTimng
+# end
+
 mutable struct DynamicalModel
     name::String # Actually used as a key in a dictionary, as well as for logging
     init::Union{Function,Void} # "Tell me what you produce."
@@ -78,23 +107,26 @@ mutable struct DynamicalModel
     actuate::Union{Function,Void} # "Produce forces."
     shutdown::Union{Function,Void} # Called when the sim ends, even when there's an error.
     dt::Float64
-    t_next::Float64
+    t_start::Float64
     constants::Any # This will be set up during setup and will never change afterwards.
     state::Any # Bonus: return a ModelState to enable "struct addition and multiplication"
     rand::RandSpec # Provide the properties of the random number generator stream you'll need.
+    t_next::Float64
+    count::Int64 # Total number of times this model has triggered
+    # final_count::Int64 # Total number of times this model will trigger
 end
 
 # Convenience constructors
-Body(name, init, derivatives, step, shutdown, dt, t_next, constants, state, rand = RandSpec()) =
-    DynamicalModel(name, init, derivatives, step, nothing, nothing, shutdown, dt, t_next, constants, state, rand)
-DiscreteSensor(name, init, step, measure, shutdown, dt, t_next, constants = nothing, state = nothing, rand = RandSpec()) =
-    DynamicalModel(name, init, nothing, step, measure, nothing, shutdown, dt, t_next, constants, state, rand)
-DiscreteActuator(name, init, step, measure, actuate, shutdown, dt, t_next, constants = nothing, state = nothing, rand = RandSpec()) =
-    DynamicalModel(name, init, nothing, step, measure, actuate, shutdown, dt, t_next, constants, state, rand)
-Software(name, init, step, shutdown, dt, t_next, constants, state) =
-    DynamicalModel(name, init, nothing, step, nothing, nothing, shutdown, dt, t_next, constants, state, nothing)
+Body(name, init, derivatives, step, shutdown, dt, t_start, constants, state, rand = RandSpec()) =
+    DynamicalModel(name, init, derivatives, step, nothing, nothing, shutdown, dt, t_start, constants, state, rand, 0., 0)
+DiscreteSensor(name, init, step, measure, shutdown, dt, t_start, constants = nothing, state = nothing, rand = RandSpec()) =
+    DynamicalModel(name, init, nothing, step, measure, nothing, shutdown, dt, t_start, constants, state, rand, 0., 0)
+DiscreteActuator(name, init, step, measure, actuate, shutdown, dt, t_start, constants = nothing, state = nothing, rand = RandSpec()) =
+    DynamicalModel(name, init, nothing, step, measure, actuate, shutdown, dt, t_start, constants, state, rand, 0., 0)
+Software(name, init, step, shutdown, dt, t_start, constants, state) =
+    DynamicalModel(name, init, nothing, step, nothing, nothing, shutdown, dt, t_start, constants, state, nothing, 0., 0)
 ConstantModel(name, init, shutdown, constants, rand = RandSpec()) =
-    DynamicalModel(name, init, nothing, nothing, nothing, nothing, shutdown, 0., 0., constants, 0., rand) # Use for planet?
+    DynamicalModel(name, init, nothing, nothing, nothing, nothing, shutdown, 0., 0., constants, 0., rand, 0., 0) # Use for planet?
 
 # Include the other code, from smallest thing to biggest thing.
 include("sensors.jl")
@@ -121,7 +153,7 @@ mutable struct Earth # TODO: Make this a ConstantModel?
     JD_0::Float64
     igrf_Y_0::Float64
     igrf::Any
-    Earth(; mu = 3.986004418e14, JD_0 = 0., igrf_Y_0 = 0., igrf = nothing) = new(mu, JD_0, igrf_Y_0, igrf);
+    Earth(; mu = 3.986004418e14, JD_0 = 0., igrf_Y_0 = 0., igrf = nothing) = new(mu, JD_0, igrf_Y_0, igrf)
 end
 
 # Top-level options describing what should happen in the sim.
@@ -129,8 +161,8 @@ mutable struct Scenario
     sim::SimParams
     planet::Any
     vehicles::Array{Vehicle,1}
-    Scenario() = new(SimParams(), Earth(), [Vehicle()]);
-    Scenario(s,p,va) = new(s,p,va);
+    Scenario() = new(SimParams(), Earth(), [Vehicle()])
+    Scenario(s,p,va) = new(s,p,va)
 end
 
 include("simulate.jl")

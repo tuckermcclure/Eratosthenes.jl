@@ -1,8 +1,9 @@
 Improvements:
-* Clean up UDPConnections so that IP address and ports can be specified via input file.
+* What is a planet? Is it an environment? Does it have state?
+* Add logging for everything.
+* Handle draws over continuous time.
 * Add soft real-time component for PITL.
 * Actuators should have continuous states.
-* Continuous-time integrator should step to the next discrete time.
 * Actuators and planet should register phenomena in various domains (mechanical, magnetic field, radiation, power).
 * Continuous-time dynamics should allow dynamical coupling.
 * Create a serial PITL module?
