@@ -39,19 +39,25 @@ t_pitl = squeeze(t_pitl, 1)
 display(maximum(Δq_sitl, 2))
 Δq_pitl = q_BI - q_BI_pitl
 display(maximum(Δq_pitl, 2))
+Δq_pitl_wrt_sitl = q_BI_sitl - q_BI_pitl
+display(maximum(Δq_pitl_wrt_sitl, 2))
 
 # Ok, also compare the angular differences.
-θ_sitl = map(k -> q2aa(qpos(qdiff(q_BI[:,k], q_BI_sitl[:,k])))[1], 1:4)
+θ_sitl = map(k -> q2aa(qpos(qdiff(q_BI[:,k], q_BI_sitl[:,k])))[1], 1:size(q_BI, 2))
 display(maximum(θ_sitl) * 180/pi)
-θ_pitl = map(k -> q2aa(qpos(qdiff(q_BI[:,k], q_BI_pitl[:,k])))[1], 1:4)
+θ_pitl = map(k -> q2aa(qpos(qdiff(q_BI[:,k], q_BI_pitl[:,k])))[1], 1:size(q_BI, 2))
 display(maximum(θ_pitl) * 180/pi)
+θ_pitl_wrt_sitl = map(k -> q2aa(qpos(qdiff(q_BI_sitl[:,k], q_BI_pitl[:,k])))[1], 1:size(q_BI_sitl, 2))
+display(maximum(θ_pitl_wrt_sitl) * 180/pi)
 
 # Show the divergence.
-pyplot()
+# pyplot()
+plotlyjs()
 # display(plot(t, Δq.',
 #              label  = ["Δq1" "Δq2" "Δq3" "Δq4"],
 #              ylabel = "Δq"))
-display(plot(t, θ_sitl.',
-             ylabel = "θ"))
+display(plot(t, θ_pitl * (180./pi * 3600.),
+             xlabel = "Time (s)",
+             ylabel = "θ (arcseconds)"))
 
 end
