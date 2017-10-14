@@ -1,9 +1,11 @@
 # Make sure we're running from the examples directory.
-cd(joinpath(@__DIR__()))
+cd(@__DIR__())
 
 reload("Eratosthenes")
 
 module Temp
+
+using BenchmarkTools
 
 using Eratosthenes # Bring in the top-level sim environment.
 using Plots # For plotting (Pkg.add("Plots"); Pkg.add("PyPlot");)
@@ -16,8 +18,8 @@ import Juno # For the progress bar
 include("EratosthenesExampleSoftware.jl")
 using .EratosthenesExampleSoftware
 
-# Create the hierarchy of objects used by the sim.
-scenario = setup("scenarios/basic-cube.yaml")
+# Create the hierarchy of objects used by the sim.`
+scenario = setup("scenarios/basic-cube-with-computers.yaml")
 
 # Create a Juno waitbar. This do-block syntax makes sure it gets "closed" even
 # if there's an error.
@@ -26,8 +28,10 @@ Juno.progress(name="Simulating...") do progress_bar
     # Run the simulation. Anything inside this do-block will be run at the
     # beginning of every major time step. This is useful for updating a progress
     # bar or a plot.
-    simulate(scenario) do fraction
-        Juno.progress(progress_bar, fraction) # Update Juno's progress bar.
+    simulate(scenario) do k, n
+        if k % 30 == 0
+            Juno.progress(progress_bar, (k-1)/n) # Update Juno's progress bar.
+        end
         return true # Return false to end the sim.
     end
 
@@ -38,22 +42,23 @@ if !isempty(scenario.sim.log_file)
 
     # Read some data from the logs. This do block takes care of
     # error-handling, so we can just read whatever we want and return it.
-    t, q_BI, ω_BI_B, t_st, q_BI_meas, t_gyro, ω_BI_B_meas =
+    t, q_BI, ω_BI_B = # , t_st, q_BI_meas, t_gyro, ω_BI_B_meas
         HDF5.h5open(scenario.sim.log_file, "r") do logs
-            (read(logs, "/cube1/truth/time"),
-             read(logs, "/cube1/truth/data/q_BI"),
-             read(logs, "/cube1/truth/data/ω_BI_B"),
-             read(logs, "/cube1/measurements/star_tracker/time"),
-             read(logs, "/cube1/measurements/star_tracker/data"),
-             read(logs, "/cube1/measurements/gyro/time"),
-             read(logs, "/cube1/measurements/gyro/data"))
+            (read(logs, "/cube1/body/state/time"),
+             read(logs, "/cube1/body/state/data/q_BI"),
+             read(logs, "/cube1/body/state/data/ω_BI_B"),
+             #read(logs, "/cube1/star_tracker/outputs/time"),
+             #read(logs, "/cube1/star_tracker/outputs/data"),
+             #read(logs, "/cube1/gyro/outputs/time"),
+             #read(logs, "/cube1/gyro/outputs/data")
+             )
         end
 
     # Scalars are logged as 1-by-n (don't know why). Convert to just n for
     # the sake of plotting.
     t      = squeeze(t, 1)
-    t_st   = squeeze(t_st, 1)
-    t_gyro = squeeze(t_gyro, 1)
+    #t_st   = squeeze(t_st, 1)
+    #t_gyro = squeeze(t_gyro, 1)
 
     # Choose a friendly plotting package. PyPlot behaves nicely.
     pyplot()

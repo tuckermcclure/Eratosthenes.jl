@@ -1,77 +1,28 @@
 Improvements:
-* What is a planet? Is it an environment? Does it have state?
-* Add logging for everything.
-* Handle draws over continuous time.
-* Add soft real-time component for PITL.
+
+* Implement effects system.
+* Sensors and actuators are the same thing; make "components".
 * Actuators should have continuous states.
-* Actuators and planet should register phenomena in various domains (mechanical, magnetic field, radiation, power).
+* Add logging for everything and a way to specify what to log.
+X Handle draws over continuous time.
+X Actuators and planet should register phenomena in various domains (mechanical, magnetic field, radiation, power).
 * Continuous-time dynamics should allow dynamical coupling.
+* Add doc strings.
+* Add examples.
+* Allow a section in a YAML file to start from another YAML file.
+
+Bonus:
+
+* Add soft real-time component for PITL.
 * Create a serial PITL module?
-* More examples, including a way to specify orbital elements instead of position and velocity. Does this imply a "parameter" field, as opposed to "constants" and "state"? Could "constants" include the notion of "parameters"?
+* A way to specify orbital elements instead of position and velocity. Does this imply a "parameter" field, as opposed to "constants" and "state"? Could "constants" include the notion of "parameters"?
 * Derive immutable structs from mutable structs (macros) and convert after setup has completed.
 * Implement SArrays and use with jitl, sitl, and pitl.
 * Allow YAML files to start from other YAML files and then just override defaults.
 
-whole_truth:
-environment? what environment state is there?
-cube1
-  body
-  sensors
-    gyro
-    star_tracker
+Questions:
 
-measurement_bus: (always vehicle-specific)
-sensors
-  gyro
-  star_tracker
-actuators
-  thruster1
-  reaction_wheel1
-
-command_bus:
-software
-  test_controller
-actuators
-
-Why not show me what measurements and commands look like on model creation, and then just allow `init` to return the initial state? Perhaps models will want to change their measurements or commands based on the "whole truth".
-
-Interfaces:
------------
-
-init (add planet?)
-----
-body      t, constants, state, draws -> state
-sensor    t, constants, state, draws, vehicle_truth -> state, measurement
-actuator  t, constants, state, draws, vehicle_truth -> state, measurement, commands
-software  t, constants, state -> state, inputs, outputs
-
-derivatives
------------
-body      t, constants, state, draws, planet, forces
-
-step
-----
-sensor    t, constants, state, draws, vehicle_truth, truth -> state
-actuator  t, constants, state, draws, command, vehicle_truth, truth -> state
-software  t, constants, state, measurements, my_inputs (read-only), outputs (read-only), all_inputs (write-only), commands (write-only) -> state, inputs, output, commands
-body      t, constants, state, draws, planet -> truth
-
-sense (don't these need to sense the planet?)
------
-sensor    t, constants, state, draws, vehicle_truth, truth
-actuator  t, constants, state, draws, commands, vehicle_truth, truth
-
-actuate
--------
-t, constants, state, rand, command, vehicle_truth, truth
-
-truth
------
-body
-actuator
-
-
-Later:
+Why not show me what measurements and commands look like on model creation, and then just allow `init` to return the initial state? Perhaps models will want to change their measurements or commands?
 
 How do we decide what gets logged?
 -> Maintain a list of signals to log, e.g.:

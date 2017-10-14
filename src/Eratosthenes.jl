@@ -12,8 +12,8 @@ simulate(scenario)
 """
 module Eratosthenes
 
-import Base.convert # Required in order to extend 'convert'.
-# import JSON
+import Base: convert, +, * # Required in order to extend these things.
+using Base.Iterators
 import YAML
 using HDF5Logger
 
@@ -24,114 +24,100 @@ using HDF5Logger
 #    include(Pkg.dir("Eratosthenes") * "/src/EratosthenesRotations.jl")
 #    using .EratosthenesRotations
 #
-include(@__DIR__() * "/EratosthenesRotations.jl")
+include("EratosthenesRotations.jl")
 using .EratosthenesRotations
 
 export UtcDateTime
-export RandSpec, RandSource, MultiRandSource, draw
-
-export DynamicalModel
-export Body, Software, DiscreteSensor, DiscreteActuator
-export Earth
-export TruthSensor, StarTracker, Gyro
-export IdealActuator
-
+export RandSpec, RandSource, MultiRandSource, draw # Rand stuff
+export ModelTiming, DynamicalModel # Top-level modeling types
+export Computer, Vehicle # Containers
+export LowEarthOrbit, TruthSensor, StarTracker, Gyro, IdealActuator # Models
+export IdealActuatorCommand
+export NoEffect, Gravity, BodyTorque, BodyForce
+export find_effect
 export setup, simulate
 export Scenario, SimParams
 
-# abstract type ModelConstants end # There's no real point to this.
+# Used to tell integrator how to add.
 abstract type ModelState end
-# abstract type ModelRand end # What's the interface going to be here?
-# abstract type ModelTruth end # What's this do? Truths could be immutable!
-# abstract type ModelMeasurement end # Measurements should be immuatble too.
-# abstract type ModelCommand end
-
-# Create a function to add together two ModelStates.
-function Base.:+(a::T, b::T) where {T <: ModelState}
-    s = deepcopy(a)
-    for field in fieldnames(a)
-        setfield!(s, field, getfield(a, field) + getfield(b, field))
-    end
-    return s
-end
-
-# Create a function to multiply a ModelState by a scalar.
-function Base.:*(a::S, b::T) where {S <: Real, T <: ModelState}
-    s = deepcopy(b)
-    for field in fieldnames(b)
-        setfield!(s, field, a * getfield(b, field))
-    end
-    return s
-end
 
 include("utilities.jl")
 include("rand.jl")
 include("physics.jl")
 include("setup.jl")
+include("effects.jl")
 
-# # Can we break up the big DynamicalModel into pieces? Does this add value?
-#
-# mutable struct ModelFunctions
-#     init::Union{Function,Void} # "Tell me what you produce."
-#     derivatives::Union{Function,Void} # "Tell me how the state is changing."
-#     step::Union{Function,Void} # "Update yourself for this time step."
-#     sense::Union{Function,Void} # "Product your measurement."
-#     actuate::Union{Function,Void} # "Produce forces."
-#     shutdown::Union{Function,Void} # Called when the sim ends, even when there's an error.
-# end
-#
-# mutable struct ModelTiming
-#     dt::Float64
-#     t_next::Float64
-#     t_start::Float64
-#     count::Int64 # Total number of times this model has triggered
-#     final_count::Int64 # Total number of times this model will trigger
-#     #triggered::Bool # True when this model triggers on a `step` and is then ready for a `sense`
-# end
-#
-# mutable struct DynamicalModel
-#     name::String # Actually used as a key in a dictionary, as well as for logging
-#     functions::ModelFunctions
-#     constants::Any # This will be set up during setup and will never change afterwards.
-#     state::Any # Bonus: return a ModelState to enable "struct addition and multiplication"
-#     rand::RandSpec # Provide the properties of the random number generator stream you'll need.
-#     timing::ModelTimng
-# end
-
-mutable struct DynamicalModel
-    name::String # Actually used as a key in a dictionary, as well as for logging
-    init::Union{Function,Void} # "Tell me what you produce."
-    derivatives::Union{Function,Void} # "Tell me how the state is changing."
-    step::Union{Function,Void} # "Update yourself for this time step."
-    sense::Union{Function,Void} # "Product your measurement."
-    actuate::Union{Function,Void} # "Produce forces."
-    shutdown::Union{Function,Void} # Called when the sim ends, even when there's an error.
+mutable struct ModelTiming
     dt::Float64
     t_start::Float64
-    constants::Any # This will be set up during setup and will never change afterwards.
-    state::Any # Bonus: return a ModelState to enable "struct addition and multiplication"
-    rand::RandSpec # Provide the properties of the random number generator stream you'll need.
     t_next::Float64
     count::Int64 # Total number of times this model has triggered
-    # final_count::Int64 # Total number of times this model will trigger
+    ModelTiming(dt = 0., t_start = 0., t_next = 0., count = 0) = new(dt, t_start, t_next, count)
 end
 
-# Convenience constructors
-Body(name, init, derivatives, step, shutdown, dt, t_start, constants, state, rand = RandSpec()) =
-    DynamicalModel(name, init, derivatives, step, nothing, nothing, shutdown, dt, t_start, constants, state, rand, 0., 0)
-DiscreteSensor(name, init, step, measure, shutdown, dt, t_start, constants = nothing, state = nothing, rand = RandSpec()) =
-    DynamicalModel(name, init, nothing, step, measure, nothing, shutdown, dt, t_start, constants, state, rand, 0., 0)
-DiscreteActuator(name, init, step, measure, actuate, shutdown, dt, t_start, constants = nothing, state = nothing, rand = RandSpec()) =
-    DynamicalModel(name, init, nothing, step, measure, actuate, shutdown, dt, t_start, constants, state, rand, 0., 0)
-Software(name, init, step, shutdown, dt, t_start, constants, state) =
-    DynamicalModel(name, init, nothing, step, nothing, nothing, shutdown, dt, t_start, constants, state, nothing, 0., 0)
-ConstantModel(name, init, shutdown, constants, rand = RandSpec()) =
-    DynamicalModel(name, init, nothing, nothing, nothing, nothing, shutdown, 0., 0., constants, 0., rand, 0., 0) # Use for planet?
+mutable struct DynamicalModel{FI, FE, FD, FU, FS, DC, DS, DI, DO}
 
-# Include the other code, from smallest thing to biggest thing.
-include("sensors.jl")
+    name::String # Actually used as a key in a dictionary, as well as for logging
+
+    # Functions
+    #
+    # NOTE: These can't be changed without changing the type of the object since
+    # we've parameterized the type for speed. If we later make immutable things
+    # out of the mutable things, then we'll remove this parameterization here
+    # but keep it for the immutable version for speed there.
+    #
+    init::FI # "Tell me what you produce."
+    effects::FE # "Produce physical effects."
+    derivatives::FD # "Tell me how the state is changing."
+    update::FU # "Update yourself for this time step."
+    shutdown::FS # Called when the sim ends, even when there's an error.
+
+    timing::ModelTiming
+
+    # Data
+    constants::DC # This will be set up during setup and will never change afterwards.
+    state::DS # Bonus: return a ModelState to enable "struct addition and multiplication"
+    inputs::DI # Inputs accepted by this model (e.g., commands); software can write to these.
+    outputs::DO # Outputs produced by this model (e.g., measurements); software can consume these.
+
+    rand::RandSpec # Provide the properties of the random number generator stream you'll need.
+
+end
+
+# Create a convenience constructor with lots of defaults.
+DynamicalModel(name;
+               init = nothing,
+               effects = nothing,
+               derivatives = nothing,
+               update = nothing,
+               shutdown = nothing,
+               timing = ModelTiming(),
+               constants = nothing,
+               state = nothing,
+               inputs = nothing,
+               outputs = nothing,
+               rand = RandSpec()) =
+    DynamicalModel(name, init, effects, derivatives, update, shutdown, timing, constants, state, inputs, outputs, rand)
+
+# Convenience constructors
+# Body(name, init, effects, derivatives, shutdown, timing, constants, state, rand = RandSpec()) =
+#     DynamicalModel(name, init, effects, derivatives, nothing, shutdown, timing, constants, state, nothing, nothing, rand)
+# DiscreteSensor(name, init, update, shutdown, timing, constants = nothing, state = nothing, inputs = nothing, outputs = nothing, rand = RandSpec()) =
+#     DynamicalModel(name, init, nothing, nothing, update, shutdown, timing, constants, state, inputs, outputs, rand)
+# DiscreteActuator(name, init, effects, update, shutdown, timing, constants = nothing, state = nothing, inputs = nothing, outputs = nothing, rand = RandSpec()) =
+#     DynamicalModel(name, init, effects, nothing, update, shutdown, timing, constants, state, inputs, outputs, rand)
+# Software(name, init, step, shutdown, inputs, outputs, dt, t_start, constants, state) =
+#     DynamicalModel(name, init, effects, derivatives, update, shutdown, timing, constants, state, inputs, outputs, rand)
+# ConstantModel(name, init, effects, shutdown, constants, rand = RandSpec()) =
+#     DynamicalModel(name, init, effects, derivatives, update, shutdown, timing, constants, state, inputs, outputs, rand)
+NullModel() = DynamicalModel("nothing")
+
+# Include the other code in no particular order.
 include("actuators.jl")
+include("planets.jl")
+include("sensors.jl")
 include("software.jl")
+include("computers.jl")
 include("vehicles.jl")
 
 # The things below set some defaults that depend on the above.
@@ -143,26 +129,17 @@ mutable struct SimParams
     seed::Int64 # Seed for default random number generator
     date_0::UtcDateTime # UTC date at the beginning of the sim
     log_file::String # Name of HDF5 file to log to
-    progress_fcn::Union{Function,Void} # Called at the beginning of each iteration of the sim
-    SimParams() = new(0.01, 10.0, 1, UtcDateTime(2017, 7, 28, 9, 27, 33.0), "", nothing)
+    SimParams() = new(0.01, 10.0, 1, UtcDateTime(2017, 7, 28, 9, 27, 33.0), "")
     SimParams(a,b,c,d,e) = new(a,b,c,d,e)
-end
-
-mutable struct Earth # TODO: Make this a ConstantModel?
-    mu::Float64
-    JD_0::Float64
-    igrf_Y_0::Float64
-    igrf::Any
-    Earth(; mu = 3.986004418e14, JD_0 = 0., igrf_Y_0 = 0., igrf = nothing) = new(mu, JD_0, igrf_Y_0, igrf)
 end
 
 # Top-level options describing what should happen in the sim.
 mutable struct Scenario
     sim::SimParams
-    planet::Any
+    environment::DynamicalModel
     vehicles::Array{Vehicle,1}
-    Scenario() = new(SimParams(), Earth(), [Vehicle()])
-    Scenario(s,p,va) = new(s,p,va)
+    Scenario() = new(SimParams(), LowEarthOrbit(), [Vehicle()])
+    Scenario(s,e,va) = new(s,e,va)
 end
 
 include("simulate.jl")

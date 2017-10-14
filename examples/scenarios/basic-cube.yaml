@@ -1,34 +1,33 @@
 sim:
-    dt: 0.02
-    t_end: 60.
-    seed: 2
-    date_0: [2017, 6, 29, 17, 6, 32.2]
-    log_file: out/basic-cube.h5
+  dt: 0.02
+  t_end: 60.
+  seed: 2
+  date_0: [2017, 6, 29, 17, 6, 32.2]
+  log_file: out/basic-cube.h5
 planet:
-    model: Earth
+  model: Earth
 vehicles:
-    - model: Vehicle
-      name: cube1
-      body:
-          constants:
-              m: 55.
-              I_B: [[5., 0., 0.],
-                    [0., 5., 0.],
-                    [0., 0., 5.]]
-          state:
-              q_BI: normalize([0.5; 1; 0.2; 0])
-      sensors:
-          - model: StarTracker
-            name: star_tracker
-            dt: 0.1
-          - model: Gyro
-            name: gyro
-            dt: 0.05
-      actuators:
-          - model: IdealActuator
-            dt: 0.05
-      software:
-          - model: StarTrackerAndGyroController
-            constants:
-                target: [0., 1., 0., 0.] # Target orientation
-            dt: 0.05
+  - model: Vehicle
+    name: cube1
+    body:
+      constants:
+        m: 55.
+        I_B: [[5., 0., 0.],
+              [0., 5., 0.],
+              [0., 0., 5.]]
+      state:
+        q_BI: normalize([0.5; 1; 0.2; 0])
+    components:
+      - model: StarTracker
+        name: star_tracker
+        dt: 0.1
+      - model: Gyro
+        name: gyro
+        dt: 0.05
+      - model: IdealActuator
+        dt: 0.05
+    software:
+      - model: StarTrackerAndGyroController
+        constants:
+          target: [0., 1., 0., 0.] # Target orientation
+        dt: 0.05

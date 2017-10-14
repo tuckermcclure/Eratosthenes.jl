@@ -1,27 +1,21 @@
 """
     Truth Sensor
 
-No matter what the vehicle truth is, this sensor can sense it. It's a useful
-debugging tool.
+This sensor can detect all physical effects generated on the vehicle.
 
 """
 function TruthSensor()
-    function init(t, constants, state, draws, truth)
-        return (nothing, truth)
+    # function init(t, constants, state, draws)
+    #     return state
+    # end
+    function sense(t, constants, state, draws, effects, inputs, effects_bus)
+        body, = find_effect(effects, BodyStateEffect(zeros(3), zeros(3), zeros(3), zeros(3)))
+        return (state, body, true)
     end
-    function sense(t, constants, state, draws, truth, whole_truth)
-        return truth
-    end
-    DiscreteSensor("truth_sensor",
-                   init,
-                   nothing, # step
-                   sense,
-                   nothing, # shutdown
-                   0.02,    # time step
-                   0.,      # start time
-                   nothing, # constants
-                   nothing, # state
-                   nothing) # rand
+    DynamicalModel("truth_sensor",
+                   #init = init,
+                   update = sense,
+                   timing = ModelTiming(0.02))
 end
 
 """
@@ -32,23 +26,21 @@ with a little noise.
 
 """
 function StarTracker()
-    function init(t, constants, state, draws, vehicle_truth)
-        return (nothing, [0., 0., 0., 1.])
-    end
-    function sense(t, constants, state, draws, vehicle_truth, truth)
+    # function init(t, constants, state, draws, body_effects)
+    #     return (nothing, [0., 0., 0., 1.])
+    # end
+    function sense(t, constants, state, draws, effects, inputs, effects_bus)
         errors = constants .* draws
-        return qcomp(mrp2q(errors), vehicle_truth.q_BI)
+        body, = find_effect(effects, BodyStateEffect(zeros(3), zeros(3), zeros(3), zeros(3)))
+        return (state, qcomp(mrp2q(errors), body.q_BI), true)
     end
-    DiscreteSensor("default_star_tracker",
-                   init,
-                   nothing, # state
-                   sense,
-                   nothing, # shutdown
-                   0.1,     # 10Hz update rate
-                   0.,      # begins measuring at t=0
-                   [0.001, 0.001, 0.001], # constants: error magnitudes (rad)
-                   nothing, # state
-                   RandSpec(sense=3)) # rand
+    DynamicalModel("default_star_tracker",
+                   #init,
+                   update = sense,
+                   timing = ModelTiming(0.1), # 10Hz update rate
+                   constants = [0.001, 0.001, 0.001], # constants: error magnitudes (rad)
+                   outputs = [0.; 0.; 0.; 1.], 
+                   rand = RandSpec(update=3)) # rand
 end
 
 """
@@ -63,42 +55,42 @@ mutable struct GyroConstants
     angular_random_walk::Float64
     bias_random_walk::Float64
     initial_bias_magnitude::Float64
+    # q_SB::Vector{Float64} # Orientation wrt the body
 end
 mutable struct GyroState
     bias::Vector{Float64}
     q_SI::Vector{Float64}
-    ω::Vector{Float64}
     t::Float64
 end
 
 function Gyro()
-    function init(t, constants, state, draws, vehicle_truth)
+    function init(t, constants, state, draws, effects, effects_bus)
+        # TODO: How to allow the user to specify the state, e.g. to recreate a run?
         initial_bias = constants.initial_bias_magnitude * (2. * draws[1:3] - 1.)
-        return (GyroState(initial_bias, vehicle_truth.q_BI, vehicle_truth.ω_BI_B, t),
-                [0.; 0.; 0.]) # example measurement
+        body, = find_effect(effects, BodyStateEffect(zeros(3), zeros(3), zeros(3), zeros(3)))
+        return (GyroState(initial_bias, body.q_BI, t),
+                true) # Active?
     end
-    function step(t, constants, state, draws, vehicle_truth, truth)
-        Δt     = t - state.t # Would be nice if models had access to this.
+    function update(t, constants, state, draws, effects, inputs, effects_bus)
+        body,  = find_effect(effects, BodyStateEffect(zeros(3), zeros(3), zeros(3), zeros(3)))
+        Δt     = t - state.t # It would be nice if models had access to their own dt.
         σ_rate = Δt > 0. ? constants.angular_random_walk / √(Δt) : 0. # These could be saved to constants for a fixed time step, which would save us from dividing by zero at the first sample.
         σ_bias = constants.bias_random_walk * √(Δt)
         noise  = σ_rate * draws[1:3]
         Δb     = σ_bias * draws[4:6]
-        θ, r   = q2aa(qdiff(vehicle_truth.q_BI, state.q_SI))
+        θ, r   = q2aa(qdiff(body.q_BI, state.q_SI))
         Δθ     = θ * r + (state.bias + 0.5*Δb) * Δt + noise
         ω      = Δθ / Δt
-        return GyroState(state.bias + Δb, vehicle_truth.q_BI, ω, t)
+        return (GyroState(state.bias + Δb, body.q_BI, t), # Updated state
+                ω,                                        # Measurement
+                true)                                     # Active?
     end
-    function sense(t, constants, state, draws, vehicle_truth, truth)
-        return state.ω
-    end
-    DiscreteSensor("default_gyro",
-                   init,
-                   step,
-                   sense,
-                   nothing, # shutdown
-                   0.01,
-                   0.,
-                   GyroConstants(0.00001, 0.0001, 0.001),
-                   GyroState([0.; 0.; 0.], [0.; 0.; 0.; 1.], [0.; 0.; 0.], 0.),
-                   RandSpec(init=(rand,3), step=6))
+    DynamicalModel("gyro",
+                   init = init,
+                   update = update,
+                   timing = ModelTiming(0.01),
+                   constants = GyroConstants(0.00001, 0.0001, 0.001),
+                   state = GyroState([0.; 0.; 0.], [0.; 0.; 0.; 1.], 0.),
+                   outputs = [0.; 0.; 0.],
+                   rand = RandSpec(init=(rand,3), update=6))
 end
