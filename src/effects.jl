@@ -60,39 +60,41 @@ end
 #     return NoEffect()
 # end
 
-# Assumes effects is an iterable array and that the + method exist for T.
-function accumulate(x::T, effects) where T
-    for effect in filter(e -> isa(e, T), effects)
-        x += effect
-    end
-    return x
-end
-
-# Allows a user to define a function to accumulate the type into another type
-# (e.g., to extract a vector).
-function accumulate(x, effects, effect_type::Type, f = e->e, args...)
-    for effect in filter(e -> isa(e, effect_type), effects)
-        x += f(effect, args...)
-    end
-    return x
-end
-
-# Acts in place and prevents unnecessary creation of vectors.
-function accumulate!(x::Vector, effects, effect_type::Type, f = e->e, args...)
-    for effect in filter(e -> isa(e, effect_type), effects)
-        x[:] += f(effect, args...)
-    end
-end
+# # Assumes effects is an iterable array and that the + method exist for T.
+# function accumulate(x::T, effects) where T
+#     for effect in Iterators.filter(e -> isa(e, T), effects)
+#         x += effect
+#     end
+#     return x
+# end
+#
+# # Allows a user to define a function to accumulate the type into another type
+# # (e.g., to extract a vector).
+# function accumulate(x, effects, effect_type::Type, f = e->e, args...)
+#     for effect in Iterators.filter(e -> isa(e, effect_type), effects)
+#         x += f(effect, args...)
+#     end
+#     return x
+# end
+#
+# # Acts in place and prevents unnecessary creation of vectors.
+# function accumulate!(x::Vector, effects, effect_type::Type, f = e->e, args...)
+#     for effect in Iterators.filter(e -> isa(e, effect_type), effects)
+#         x[:] += f(effect, args...)
+#     end
+# end
 
 # Acts in place and prevents unnecessary creation of vectors.
 function accumulate!(x::Vector, effects_bus::Dict, effect_type::Type, f = e->e, args...)
-    for effects = values(effects_bus)
-        for effect in filter(e -> isa(e, effect_type), effects)
-            x[:] += f(effect, args...)
+    for effects in values(effects_bus)
+        for effect in effects
+            if isa(effect, effect_type)
+                x[:] += f(effect, args...)
+            end
         end
     end
 end
 
-function accumulate(x, effects_bus::Dict{String, Tuple}, effect_type::Type, f = e->e, args...)
-    return accumulate(x, flatten(values(effects_bus)), effect_type, f, args...)
-end
+# function accumulate(x, effects_bus::Dict{String, Tuple}, effect_type::Type, f = e->e, args...)
+#     return accumulate(x, flatten(values(effects_bus)), effect_type, f, args...)
+# end

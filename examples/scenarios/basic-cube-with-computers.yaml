@@ -35,4 +35,3 @@ vehicles:
           - model: StarTrackerAndGyroController
             constants: { target: [0., 1., 0., 0.] } # Target orientation
             timing: { dt: 0.05 }
-            

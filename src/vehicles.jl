@@ -51,9 +51,11 @@ function Body()
         # Body-fixed forces
         f_B = zeros(3)
         for e in values(effects)
-            for f in filter(f -> isa(f, BodyForce), e)
-                f_B[:] += f.force
-                τ_B[:] += (f.position - constants.r_mb_B) × f.force
+            for f in e
+                if isa(f, BodyForce)
+                    f_B[:] += f.force
+                    τ_B[:] += (f.position - constants.r_mb_B) × f.force
+                end
             end
         end
 

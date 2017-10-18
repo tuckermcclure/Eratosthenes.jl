@@ -18,24 +18,33 @@ import Juno # For the progress bar
 include("EratosthenesExampleSoftware.jl")
 using .EratosthenesExampleSoftware
 
-# Create the hierarchy of objects used by the sim.`
+# Create the hierarchy of objects used by the sim.
 scenario = setup("scenarios/basic-cube-with-computers.yaml")
+# scenario.sim.log_file = "";
 
-# Create a Juno waitbar. This do-block syntax makes sure it gets "closed" even
-# if there's an error.
-Juno.progress(name="Simulating...") do progress_bar
+simulate(scenario)
 
-    # Run the simulation. Anything inside this do-block will be run at the
-    # beginning of every major time step. This is useful for updating a progress
-    # bar or a plot.
-    simulate(scenario) do k, n
-        if k % 30 == 0
-            Juno.progress(progress_bar, (k-1)/n) # Update Juno's progress bar.
-        end
-        return true # Return false to end the sim.
-    end
+# @profile simulate(scenario)
+# open("prof.txt", "w") do s
+#     Profile.print(IOContext(s, :displaysize => (24, 500)))
+# end
+# Profile.clear()
 
-end
+# # Create a Juno waitbar. This do-block syntax makes sure it gets "closed" even
+# # if there's an error.
+# Juno.progress(name="Simulating...") do progress_bar
+#
+#     # Run the simulation. Anything inside this do-block will be run at the
+#     # beginning of every major time step. This is useful for updating a progress
+#     # bar or a plot.
+#     simulate(scenario) do k, n
+#         if k % 30 == 0
+#             Juno.progress(progress_bar, (k-1)/n) # Update Juno's progress bar.
+#         end
+#         return true # Return false to end the sim.
+#     end
+#
+# end
 
 # Open the logs and plot some things.
 if !isempty(scenario.sim.log_file)

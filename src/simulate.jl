@@ -319,47 +319,51 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario)
                     vehicle_effects = copy(effects[vehicle.name])
 
                     # Update any sensor whose t_next has come.
-                    for component in filter(c -> c.update != nothing && t[k] >= c.timing.t_next - ϵ, vehicle.components)
+                    for component in vehicle.components
+                        if component.update != nothing && t[k] >= component.timing.t_next - ϵ
 
-                        # Update the state and get the measurement.
-                        component.state,
-                        outputs[vehicle.name][component.name] = component.update(
-                            t[k],
-                            component.constants,
+                            # Update the state and get the measurement.
                             component.state,
-                            draw(component.rand, :update),
-                            vehicle_effects,
-                            inputs[vehicle.name][component.name],
-                            effects)
+                            outputs[vehicle.name][component.name] = component.update(
+                                t[k],
+                                component.constants,
+                                component.state,
+                                draw(component.rand, :update),
+                                vehicle_effects,
+                                inputs[vehicle.name][component.name],
+                                effects)
 
-                        # Update the next hit time.
-                        component.timing.count += 1
-                        component.timing.t_next = component.timing.dt * component.timing.count + component.timing.t_start
+                            # Update the next hit time.
+                            component.timing.count += 1
+                            component.timing.t_next = component.timing.dt * component.timing.count + component.timing.t_start
 
-                        # TODO: Log.
+                            # TODO: Log.
 
+                        end
                     end
 
                     # Update any sensor whose t_next has come.
-                    for computer in filter(c -> c.board.update != nothing && t[k] >= c.timing.t_next - ϵ, vehicle.computers)
+                    for computer in vehicle.computers
+                        if computer.board.update != nothing && t[k] >= computer.timing.t_next - ϵ
 
-                        # Update the state and get the measurement.
-                        computer.board.state,
-                        outputs[vehicle.name][computer.name][computer.board.name] = computer.board.update(
-                            t[k],
-                            computer.board.constants,
+                            # Update the state and get the measurement.
                             computer.board.state,
-                            draw(computer.board.rand, :update),
-                            vehicle_effects,
-                            inputs[vehicle.name][computer.name][computer.board.name],
-                            effects)
+                            outputs[vehicle.name][computer.name][computer.board.name] = computer.board.update(
+                                t[k],
+                                computer.board.constants,
+                                computer.board.state,
+                                draw(computer.board.rand, :update),
+                                vehicle_effects,
+                                inputs[vehicle.name][computer.name][computer.board.name],
+                                effects)
 
-                        # Update the next hit time.
-                        computer.board.timing.count += 1
-                        computer.board.timing.t_next = computer.board.timing.dt * computer.board.timing.count + computer.board.timing.t_start
+                            # Update the next hit time.
+                            computer.board.timing.count += 1
+                            computer.board.timing.t_next = computer.board.timing.dt * computer.board.timing.count + computer.board.timing.t_start
 
-                        # TODO: Log.
+                            # TODO: Log.
 
+                        end
                     end
 
                 end
@@ -384,34 +388,36 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario)
 
                     # Run each software, allowing subsequent processes to consume
                     # inputs/outputs from prior processes on this component.
-                    for software in filter(s -> t[k] >= s.timing.t_next && s.update != nothing, computer.software)
+                    for software in computer.software
+                        if software.update != nothing && t[k] >= software.timing.t_next
 
-                        # Any software of this computer can consume
-                        # inputs/outputs from the prior components. They cannot
-                        # see outputs from other components for this sample.
+                            # Any software of this computer can consume
+                            # inputs/outputs from the prior components. They cannot
+                            # see outputs from other components for this sample.
 
-                        # Update the inputs bus and outputs for this software.
-                        software.state,
-                        vehicle_outputs_temp[computer.name][software.name], # This software's outputs
-                        inputs[vehicle.name] = # Commands or software inputs for any other computer on this vehicle
-                            software.update(t[k],
-                                        software.constants,
-                                        software.state,
-                                        inputs[vehicle.name][computer.name][software.name], # Commands or software inputs from this vehicle
-                                        vehicle_outputs_temp, # Includes measurements and other software outputs
-                                        inputs[vehicle.name]) # To write to the inputs of other components
+                            # Update the inputs bus and outputs for this software.
+                            software.state,
+                            vehicle_outputs_temp[computer.name][software.name], # This software's outputs
+                            inputs[vehicle.name] = # Commands or software inputs for any other computer on this vehicle
+                                software.update(t[k],
+                                            software.constants,
+                                            software.state,
+                                            inputs[vehicle.name][computer.name][software.name], # Commands or software inputs from this vehicle
+                                            vehicle_outputs_temp, # Includes measurements and other software outputs
+                                            inputs[vehicle.name]) # To write to the inputs of other components
 
-                        # Update the next sample time.
-                        software.timing.count  += 1
-                        software.timing.t_next = software.timing.dt * software.timing.count + software.timing.t_start
+                            # Update the next sample time.
+                            software.timing.count  += 1
+                            software.timing.t_next = software.timing.dt * software.timing.count + software.timing.t_start
 
-                        # Copy the updated outputs to the complete set of
-                        # updated outputs that won't be used again until the
-                        # next sample.
-                        outputs[vehicle.name][computer.name][software.name] = vehicle_outputs_temp[computer.name][software.name]
+                            # Copy the updated outputs to the complete set of
+                            # updated outputs that won't be used again until the
+                            # next sample.
+                            outputs[vehicle.name][computer.name][software.name] = vehicle_outputs_temp[computer.name][software.name]
 
-                        # TODO: Log.
+                            # TODO: Log.
 
+                        end
                     end # software
 
                     # Now that we're done with this component, return any of the
@@ -425,8 +431,8 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario)
             end # vehicle
 
             # TODO: Or should we do all logging here?
-            for vehicle in scenario.vehicles
-                if isa(log, HDF5Logger.Log)
+            if log != nothing
+                for vehicle in scenario.vehicles
                     slug = "/" * vehicle.name * "/" * vehicle.body.name * "/state/"
                     log!(log, slug, t[k], vehicle.body.state)
                 end
@@ -614,7 +620,7 @@ function calculate_time_steps(scenario)
     t_starts = Vector{Float64}()
     for vehicle in scenario.vehicles
         # TODO: Bodies might have discrete steps.
-        for component in filter(c -> c.timing.dt != 0., vehicle.components)
+        for component in Iterators.filter(c -> c.timing.dt != 0., vehicle.components)
             push!(dts, component.timing.dt)
             push!(t_starts, component.timing.t_start)
             component.timing.t_next = component.timing.t_start
@@ -625,7 +631,7 @@ function calculate_time_steps(scenario)
                 push!(t_starts, computer.board.timing.t_start)
                 computer.board.timing.t_next = computer.board.timing.t_start
             end
-            for software in filter(s -> s.timing.dt != 0., computer.software)
+            for software in Iterators.filter(s -> s.timing.dt != 0., computer.software)
                 push!(dts, software.timing.dt)
                 push!(t_starts, software.timing.t_start)
                 software.timing.t_next = software.timing.t_start

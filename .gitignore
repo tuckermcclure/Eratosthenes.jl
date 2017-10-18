@@ -6,4 +6,4 @@
 # Development stuff
 */.archive/
 */out/
-*/scrap*.jl
+scrap*.jl
