@@ -15,9 +15,9 @@ if !isempty(scenario.sim.log_file)
     # Read some data from the logs. This do block takes care of
     # error-handling, so we can just read whatever we want and return it.
     t, q_BI, ω_BI_B = HDF5.h5open(scenario.sim.log_file, "r") do logs
-        (read(logs, "/cube1/truth/time"),
-         read(logs, "/cube1/truth/data/q_BI"),
-         read(logs, "/cube1/truth/data/ω_BI_B"))
+        (read(logs, "/cube1/body/state/time"),
+         read(logs, "/cube1/body/state/data/q_BI"),
+         read(logs, "/cube1/body/state/data/ω_BI_B"))
     end
 
     # Scalars are logged as 1-by-n (don't know why). Convert to just n for

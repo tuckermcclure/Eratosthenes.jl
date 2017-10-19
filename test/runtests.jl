@@ -24,36 +24,24 @@ b = normalize([2., 2., 1., -2.])
 
 # Create an actuator that provides a constant torque.
 function Constorquer()
-    function init(t, constants, state, draws, truth)
-        return (nothing, # state
-                nothing, # measurement
-                nothing) # command
+    function effects(t, constants, state, draws, command, effects, effects_bus)
+        return (BodyTorque(constants),)
     end
-    function actuate(t, constants, state, draws, command, truth, whole_truth)
-        return [[0.; 0.; 0.] constants]
-    end
-    DiscreteActuator("constorquer",
-                     init,
-                     nothing,
-                     nothing,
-                     actuate,
-                     nothing,
-                     0.01,
-                     0.,
-                     [2.; 0.; 0.], # Torque (must be about principal axis)
-                     nothing,
-                     nothing)
+    DynamicalModel("constorquer",
+                   effects = effects,
+                   constants = [2.; 0.; 0.], # Torque (must be about principal axis)
+                   timing = ModelTiming(0.01))
 end
 
 # Create a default simulation with only a constorquer. We'll be able to predict
 # the end result.
 scenario = Scenario()
 scenario.sim.t_end = 5.
-scenario.vehicles[1].actuators = [Constorquer()]
+scenario.vehicles[1].components = [Constorquer()]
 simulate(scenario)
 
 # Test that we rolled just as much as expected.
-τ             = scenario.vehicles[1].actuators[1].constants
+τ             = scenario.vehicles[1].components[1].constants
 Δt            = scenario.sim.t_end
 I_B           = scenario.vehicles[1].body.constants.I_B
 q_expected    = aa2q(0.5 * Δt^2 * norm(I_B \ τ), normalize(τ))
