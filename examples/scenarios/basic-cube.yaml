@@ -1,33 +1,37 @@
 sim:
-  dt: 0.02
-  t_end: 60.
-  seed: 2
-  date_0: [2017, 6, 29, 17, 6, 32.2]
+  dt: 0.02 # Timestep for RK4 for continuous-time states (s)
+  t_end: 60. # End time of simulation (it starts at 0) (s)
+  seed: 1 # Seed for top-level random number generator
+  date_0: [2017, 6, 29, 17, 6, 32.2] # Simulation start date (UT1)
   log_file: out/basic-cube.h5
-planet:
-  model: Earth
+environment:
+  model: LowEarthOrbit # Includes gravity, magnetic field, air density
 vehicles:
-  - model: Vehicle
+  - model: Vehicle # Generic rigid body with inertial state
     name: cube1
     body:
       constants:
-        m: 55.
+        m: 55. # Mass of the body (kg); components can have their own masses via Mass effects
         I_B: [[5., 0., 0.],
               [0., 5., 0.],
-              [0., 0., 5.]]
+              [0., 0., 5.]] # Central mass moment of inertia of the body (kg m^2)
       state:
-        q_BI: normalize([0.5; 1; 0.2; 0])
-    components:
-      - model: StarTracker
-        name: star_tracker
-        dt: 0.1
-      - model: Gyro
+        r_be_I: "[6378137.+350000., 0., 0.]" # Position of reference point b wrt COM of Earth in ICRF (m)
+        v_be_I: "7600. * [0; cos(pi/4); sin(pi/4)]" # Rate of change of above (m/s)
+        q_BI:   "normalize([0.5; 1; 0.2; 0])" # Orientation of body wrt ICRF
+        ω_BI_B: [0., 0., 0.] # Rotation rate of body wrt ICRF, expressed in body (rad/s)
+    components: # Low-level stuff, like sensors and actuators; these run "before" software on common timesteps.
+      - model: Gyro # Generic gyro; uses finite difference of q_BI as average rate
         name: gyro
-        dt: 0.05
-      - model: IdealActuator
-        dt: 0.05
-    software:
-      - model: StarTrackerAndGyroController
-        constants:
-          target: [0., 1., 0., 0.] # Target orientation
-        dt: 0.05
+        timing: { dt: 0.05 }
+      - model: StarTracker # Generic star tracker; measures q_BI
+        name: star_tracker
+        timing: { dt: 0.1 }
+      - model: IdealActuator # Produces the commanded force and torque effects
+        timing: { dt: 0.05 }
+    computers: # These are more sophisticated and can run multiple processes at various rates.
+      - model: Computer # Generic flight computer; just runs its processes
+        software:
+          - model: StarTrackerAndGyroController
+            constants: { target: [0., 1., 0., 0.] } # Target orientation
+            timing: { dt: 0.05 }

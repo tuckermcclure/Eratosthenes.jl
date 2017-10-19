@@ -12,7 +12,7 @@ simulate(scenario)
 """
 module Eratosthenes
 
-import Base: convert, +, * # Required in order to extend these things.
+import Base: convert, +, *, accumulate! # Required in order to extend these things.
 using Base.Iterators
 import YAML
 using HDF5Logger
@@ -34,7 +34,7 @@ export Computer, Vehicle # Containers
 export LowEarthOrbit, TruthSensor, StarTracker, Gyro, IdealActuator # Models
 export IdealActuatorCommand
 export NoEffect, Gravity, BodyTorque, BodyForce
-export find_effect
+export find_effect, accumulate!
 export setup, simulate
 export Scenario, SimParams
 

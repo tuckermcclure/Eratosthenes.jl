@@ -15,6 +15,7 @@ mutable struct BodyStateEffect{T <: Real} <: Effect
     q_BI::Vector{T}   # Attitude quaternion of body frame wrt ICRF
     ω_BI_B::Vector{T} # Rotation rate of body frame wrt ICRF, in body coordinates
 end
+BodyStateEffect() = BodyStateEffect(zeros(3), zeros(3), [0.; 0.; 0.; 1.], zeros(3))
 
 #############
 # Functions #

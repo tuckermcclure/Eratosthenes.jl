@@ -374,6 +374,8 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario)
             # Software Update #
             ###################
 
+            # TODO: Should this go inside the k > 1 check?
+
             # Update sensors, software, and actuators.
             for vehicle in scenario.vehicles
 

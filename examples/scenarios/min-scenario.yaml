@@ -1,27 +1,28 @@
 sim:
-    dt: 0.02
-    t_end: 60.
-    date_0: [2017, 6, 29, 17, 6, 32.2] # Comments look like this.
-    log_file: out/min-scenario-log.h5
+  dt: 0.02
+  t_end: 60.
+  date_0: [2017, 6, 29, 17, 6, 32.2] # Comments look like this.
+  log_file: out/min-scenario.h5
 planet:
-    model: Earth
+  model: Earth
 vehicles:
-    - model: Vehicle # Use a generic Vehicle as our dynamic model
-      name: cube1 # Give it a name (for the logs)
-      body:
-          constants:
-              m: 55. # Mass (kg)
-              I_B: [[5., 0., 0.],
-                    [0., 5., 0.],
-                    [0., 0., 5.]] # Moment of inertia (kg m^2)
-          state: # Set whatever parts of the state we care about.
-              q_BI: normalize([0.5; 1; 0.2; 0]) # This is evaluated.
-      sensors:
-          - model: TruthSensor # Good for basic drafts and debugging
-            dt: 0.05
-      actuators:
-          - model: IdealActuator # Gives the requested force and torque
-            dt: 0.05
-      software:
+  - model: Vehicle # Use a generic Vehicle as our dynamic model
+    name: cube1 # Give it a name (for the logs)
+    body:
+      constants:
+        m: 55. # Mass (kg)
+        I_B: [[5., 0., 0.],
+              [0., 5., 0.],
+              [0., 0., 5.]] # Moment of inertia (kg m^2)
+      state: # Set whatever parts of the state we care about.
+        q_BI: normalize([0.5; 1; 0.2; 0]) # This is evaluated.
+    components:
+      - model: TruthSensor # Good for basic drafts and debugging
+        timing: { dt: 0.05 }
+      - model: IdealActuator # Gives the requested force and torque
+        timing: { dt: 0.05 }
+    computers:
+      - model: Computer
+        software:
           - model: IdealPDController
-            dt: 0.05
+            timing: { dt: 0.05 }
