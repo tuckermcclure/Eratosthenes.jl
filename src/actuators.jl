@@ -4,38 +4,37 @@
 # thruster), MagneticField (also located somewhere specific). Until then, this
 # will keep us moving forward.
 
+mutable struct IdealActuatorCommand
+    force_B::Vector{Float64}
+    torque_B::Vector{Float64}
+end
+
 """
     IdealActuator
 
-This actuator provides exactly the force and torque that are requested from it.
+This actuator provides exactly effects (e.g., force and torque) that are
+requested from it.
 
 """
 function IdealActuator()
 
     # Initialize the state based on the default (or overwritten) state,
     # constants, and true situation.
-    function init(t, constants, state, draws, truth)
-        return (nothing, # state
-                nothing, # measurement
-                zeros(3, 2)) # command
-    end
+    # function init(t, constants, state, draws)
+    #     return state
+    # end
 
-    # Output forces at the minor timestep.
-    function actuate(t, constants, state, draws, command, truth, whole_truth)
-        return command
+    # Outputs whatever effects were commanded. This runs at the minor time step.
+    function effects(t, constants, state, draws, command, effects, effects_bus)
+        return (BodyForce(command.force_B, [0.; 0.; 0.]),
+                BodyTorque(command.torque_B))
     end
 
     # Create the IdealActuator as a DynamicalModel.
-    DiscreteActuator("ideal_actuator",
-                     init,
-                     nothing, # step
-                     nothing, # sense
-                     actuate,
-                     nothing, # shutdown
-                     0.01,    # time step
-                     0.,      # start time
-                     nothing, # constants
-                     nothing, # state
-                     nothing) # rand
+    DynamicalModel("ideal_actuator",
+                   #init = init,
+                   effects = effects,
+                   timing = ModelTiming(0.01),
+                   inputs = IdealActuatorCommand([0.; 0.; 0.], [0.; 0.; 0.]))
 
 end

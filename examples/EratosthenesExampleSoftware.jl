@@ -37,7 +37,7 @@ mutable struct StarTrackerAndGyroControllerConstants
                                           conn   = UDPConnection(),
                                           c_lib  = Ptr{Void}(0),
                                           c_fcn  = Ptr{Void}(0)) =
-                                         new(target, mode, conn, c_lib, c_fcn)
+        new(target, mode, conn, c_lib, c_fcn)
 end
 
 """
@@ -66,20 +66,18 @@ function StarTrackerAndGyroController()
             println("Connecting to remote computer.")
             udp_connect(constants.conn)
         end
-        return (state,
-                nothing, # inputs that I accept (anyone can write to these)
-                nothing) # my outputs (only I can write to these)
+        return (state, true)
     end
 
     # This function is called each time the controller trigger time is reached.
     # It should update the state using its inputs and the outputs from other
     # software or sensors. It should write to its own outputs and to the inputs
     # of any other software or of actuators.
-    function step(t, constants, state, measurements, my_inputs, outputs, inputs, commands)
+    function step(t, constants, state, inputs, outputs_bus, inputs_bus)
 
         # Extract what we care about.
-        ω_BI_B = measurements["gyro"]
-        q_BI   = measurements["star_tracker"]
+        ω_BI_B = outputs_bus["gyro"]
+        q_BI   = outputs_bus["star_tracker"]
         q_TI   = constants.target
         gains  = [0.2; 2.]
 
@@ -128,9 +126,9 @@ function StarTrackerAndGyroController()
         end
 
         # Write out our command for the ideal actuator.
-        commands["ideal_actuator"] = [f_B τ_B]
+        inputs_bus["ideal_actuator"] = IdealActuatorCommand(f_B, τ_B)
 
-        return (state, nothing, inputs, commands)
+        return (state, nothing, inputs_bus)
 
     end
 
@@ -146,14 +144,12 @@ function StarTrackerAndGyroController()
         end
     end
 
-    Software("star_tracker_and_gyro_controller",
-             init,
-             step,
-             shutdown,
-             0.05,      # Sample rate
-             0.,        # Next trigger time
-             constants,
-             nothing)   # state
+    DynamicalModel("star_tracker_and_gyro_controller",
+                   init = init,
+                   update = step,
+                   shutdown = shutdown,
+                   timing = ModelTiming(0.05),  # Sample rate
+                   constants = constants)
 
 end
 

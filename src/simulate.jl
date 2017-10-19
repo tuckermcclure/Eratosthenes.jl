@@ -1,32 +1,4 @@
-# add! a whole structure to the log.
-function add!(log::HDF5Logger.Log, slug::String, t::Real, data, n::Int)
-    function add_structured!(log, slug, data, n)
-        if isbits(data) || (isa(data, Array) && isbits(eltype(data)))
-            HDF5Logger.add!(log, slug, data, n) # HDF5Loggeres only know scalars, vectors, and matrices.
-        else
-            for field in fieldnames(data)
-                add_structured!(log, slug * "/" * string(field), getfield(data, field), n)
-            end
-        end
-    end
-    HDF5Logger.add!(log, slug * "time", t, n)
-    add_structured!(log, slug * "data", data, n)
-end
-
-# log! a whole structure.
-function log!(log::HDF5Logger.Log, slug::String, t::Real, data)
-    function log_structured!(log, slug, data,)
-        if isbits(data) || (isa(data, Array) && isbits(eltype(data)))
-            HDF5Logger.log!(log, slug, data)
-        else
-            for field in fieldnames(data)
-                log_structured!(log, slug * "/" * string(field), getfield(data, field))
-            end
-        end
-    end
-    HDF5Logger.log!(log, slug * "time", t)
-    log_structured!(log, slug * "data", data)
-end
+include("logging.jl")
 
 """
     simulate
@@ -35,92 +7,43 @@ This is the primary simulation function that begins with a set up scenario and
 propagates until the end of time.
 
 """
-function simulate(scenario::Scenario)
+function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario)
 
     # Create the log.
-    # log = !isempty(scenario.sim.log_file) ? HDF5Logger.Log(scenario.sim.log_file) : nothing
     if !isempty(scenario.sim.log_file)
-        println("Creating log $(scenario.sim.log_file).")
+        println("Creating log ", scenario.sim.log_file)
         log = HDF5Logger.Log(scenario.sim.log_file)
     else
         log = nothing
     end
 
-    truth        = Dict{String,Any}() # This could contain vehicle truth as well as environment and actuator truth.
-    measurements = Dict{String,Dict{String,Any}}() # "This is what I'll measure every sample."
-    commands     = Dict{String,Dict{String,Any}}() # "This is how you tell me what to do."
-    inputs       = Dict{String,Dict{String,Any}}() # "Anyone can write to these inputs. I will consume them."
-    outputs      = Dict{String,Dict{String,Any}}() # "I will write to these outputs. Anyone can consume them."
+    effects = Dict{String,Dict{String,Tuple}}() # "These are the effects that I generate."
+    inputs  = Dict{String,Dict{String,Any}}()   # "Anyone can write to these inputs. I will consume them."
+    outputs = Dict{String,Dict{String,Any}}()   # "I will write to these outputs. Anyone can consume them."
 
     # Seed the global random number generator, which we'll only use to draw any
     # necessary seeds for other RNGs. When this is used as part of a Monte-Carlo
     # test, this global seed and all seeds below will be overridden. However,
     # we're not there yet; that's Milestone 3.
-    srand(1)
+    srand(scenario.sim.seed)
 
     # Seed the components' RNGs.
+    seed(scenario.environment.rand)
     for vehicle in scenario.vehicles
         seed(vehicle.body.rand)
-        for sensor   in vehicle.sensors;   seed(sensor.rand);   end;
-        for actuator in vehicle.actuators; seed(actuator.rand); end;
+        for component in vehicle.components; seed(component.rand); end;
+        for computer in vehicle.computers; seed(computer.board.rand); end;
     end
 
-    # Get all of the discrete time steps and start times.
-    dts      = Vector{Float64}()
-    t_starts = Vector{Float64}()
-    for vehicle in scenario.vehicles
-        for sensor in vehicle.sensors
-            push!(dts, sensor.dt)
-            push!(t_starts, sensor.t_start)
-            sensor.t_next = sensor.t_start
-        end
-        for software in vehicle.software
-            push!(dts, software.dt)
-            push!(t_starts, software.t_start)
-            software.t_next = software.t_start
-        end
-        for actuator in vehicle.actuators
-            push!(dts, actuator.dt)
-            push!(t_starts, actuator.t_start)
-            actuator.t_next = actuator.t_start
-        end
-    end
-
-    # Timing slop. Discrete processes will occur when they're within this amount of
-    # time from when they're supposed to happen.
-    ϵ = eps(10 * scenario.sim.t_end)
-
-    # Make the time history.
-    if !isempty(dts)
-
-        # Get the complete set of sample times.
-        t, = calculate_time_steps(scenario.sim.t_end, scenario.sim.dt, dts, t_starts, ϵ)
-
-        # # Use the `counts` to fill in `final_count`. (Nevermind, we'll just
-        # # calculate it below.)
-        # for vehicle in scenario.vehicles
-        #     for sensor in vehicle.sensors
-        #         sensor.final_count = shift!(counts)
-        #     end
-        #     for software in vehicle.software
-        #         software.final_count = shift!(counts)
-        #     end
-        #     for actuator in vehicle.actuators
-        #         actuator.final_count = shift!(counts)
-        #     end
-        # end
-
-    else
-        t = collect(0.:scenario.sim.dt:scenario.sim.t_end)
-        if t[end] != scenario.sim.t_end # Stop at exactly the end time.
-            push!(t, senario.sim.t_end)
-        end
-    end
+    # Get the complete set of sample times.
+    t, ϵ = calculate_time_steps(scenario)
     nt = length(t) # Total number of steps to take
+
+    # Record the start time.
+    start_time = time_ns()
 
     # If anything goes wrong, we'll want to tidy up here before rethrowing the
     # error.
-    start_time = time_ns() # Start the timer.
     k = 1
     try
 
@@ -128,82 +51,200 @@ function simulate(scenario::Scenario)
         # Component Init #
         ##################
 
-        # We'll initialize the state for each model and get the measurements,
-        # commands, inputs, and outputs from the appropriate components.
+        # We'll initialize the state for each model and get the inputs and
+        # outputs from the appropriate components.
 
-        # Initialize each vehicle first.
-        for vehicle in scenario.vehicles
-            vehicle.body.state, truth[vehicle.name] =
-                vehicle.body.init(t[1],
-                                  vehicle.body.constants,
-                                  vehicle.body.state,
-                                  draw(vehicle.body.rand, :init))
+        # Initialize the environment.
+        if scenario.environment.init != nothing
+            scenario.environment.init(t[1],
+                                      scenario.environment.constants,
+                                      scenario.environment.state,
+                                      draw(scenario.environment.rand, :init))
         end
 
-        # Now initialize each vehicle's subsystems
+        # Initialize the vehicles.
         for vehicle in scenario.vehicles
-            measurements[vehicle.name] = Dict{String,Any}()
-            commands[vehicle.name]     = Dict{String,Any}()
-            inputs[vehicle.name]       = Dict{String,Any}()
-            outputs[vehicle.name]      = Dict{String,Any}()
-            for sensor in vehicle.sensors
-                sensor.state,
-                measurements[vehicle.name][sensor.name] =
-                    sensor.init(t[1],
-                                sensor.constants,
-                                sensor.state,
-                                draw(sensor.rand, :init),
-                                truth[vehicle.name])
+
+            effects[vehicle.name] = Dict{String,Tuple}()
+
+            # Initialize each vehicle body before doing components.
+            if vehicle.body.init != nothing
+                vehicle.body.state =
+                    vehicle.body.init(t[1],
+                                      vehicle.body.constants,
+                                      vehicle.body.state,
+                                      draw(vehicle.body.rand, :init))
             end
-            for software in vehicle.software
-                software.state,
-                inputs[vehicle.name][software.name],
-                outputs[vehicle.name][software.name] =
-                    software.init(t[1],
-                                  software.constants,
-                                  software.state)
+            if vehicle.body.effects != nothing
+                effects[vehicle.name][vehicle.body.name] =
+                    vehicle.body.effects(t[1],
+                                         vehicle.body.constants,
+                                         vehicle.body.state,
+                                         draw(vehicle.body.rand, :effects))
+            else
+                effects[vehicle.name][vehicle.body.name] = () # TODO: Do I need this?
             end
-            for actuator in vehicle.actuators
-                actuator.state,
-                measurements[vehicle.name][actuator.name],
-                commands[vehicle.name][actuator.name] =
-                    actuator.init(t[1],
-                                  actuator.constants,
-                                  actuator.state,
-                                  draw(actuator.rand, :init),
-                                  truth[vehicle.name])
+
+            # Get the effects of the environment on the body.
+            if scenario.environment.effects != nothing
+                effects[vehicle.name][scenario.environment.name] =
+                    scenario.environment.effects(t[1],
+                                                 scenario.environment.constants,
+                                                 scenario.environment.state,
+                                                 draw(scenario.environment.rand, :effects),
+                                                 effects[vehicle.name],
+                                                 effects)
+            else
+                effects[vehicle.name][scenario.environment.name] = ()
             end
+
         end
+
+        # Now initialize each vehicle's subsystems.
+        for vehicle in scenario.vehicles
+
+            inputs[vehicle.name]  = Dict{String,Any}()
+            outputs[vehicle.name] = Dict{String,Any}()
+
+            for component in vehicle.components
+
+                if component.init != nothing
+                    component.state, = component.init(
+                        t[1],
+                        component.constants,
+                        component.state,
+                        draw(component.rand, :init),
+                        effects[vehicle.name],
+                        effects)
+                end
+
+                if component.effects != nothing
+                    effects[vehicle.name][component.name] = component.effects(
+                        t[1],
+                        component.constants,
+                        component.state,
+                        draw(component.rand, :effects),
+                        component.inputs,
+                        effects[vehicle.name],
+                        effects) # TODO: Limit this to the body and environment effects.
+                end
+
+                inputs[vehicle.name][component.name]  = component.inputs
+                outputs[vehicle.name][component.name] = component.outputs
+
+            end
+
+            for computer in vehicle.computers
+
+                inputs[vehicle.name][computer.name]  = Dict{String,Any}()
+                outputs[vehicle.name][computer.name] = Dict{String,Any}()
+
+                if computer.board.init != nothing
+                    computer.board.state = computer.board.init(
+                        t[1],
+                        computer.board.constants,
+                        computer.board.state,
+                        draw(computer.board.rand, :init),
+                        effects[vehicle.name],
+                        effects)
+                end
+                if computer.board.effects != nothing
+                    effects[vehicle.name][computer.name][computer.board.name] = computer.board.effects(
+                        t[1],
+                        computer.board.constants,
+                        computer.board.state,
+                        draw(computer.board.rand, :effects),
+                        computer.board.inputs,
+                        effects[vehicle.name],
+                        effects) # TODO: Limit this to the body and environment effects.
+                end
+
+                for software in computer.software
+
+                    if software.init != nothing
+                        software.state, = software.init(t[1],
+                                                       software.constants,
+                                                       software.state)
+                    end
+
+                    inputs[vehicle.name][computer.name][software.name]  = software.inputs
+                    outputs[vehicle.name][computer.name][software.name] = software.outputs
+
+                end
+
+            end
+
+        end
+
+        # We now have the state of, inputs to, and outputs from all of pieces of
+        # the simulation for the first sample. We also have all of the effects
+        # resulting from the current state.
+        #
+        # I would like for the software to begin commanding immediately. Perhaps
+        # the init function should also allow everything to update its outputs
+        # and write to the inputs of others. How does this interact with the
+        # idea that we can start the sim in a specific state, e.g. from half-way
+        # through a previous run? TODO
 
         ############
         # Log Init #
         ############
 
-        # Preallocate space for the streams will need in the logger.
-        if isa(log, HDF5Logger.Log)
+        # Preallocate space for the streams we'll need in the logger.
+        # TODO: Log on the first sample.
+        if log != nothing
 
             println("Setting up log.")
             for vehicle in scenario.vehicles
 
-                # Set up the streams for the vehicle's truth.
-                slug = "/" * vehicle.name * "/truth/"
-                add!(log, slug, t[1], truth[vehicle.name], nt)
+                ## Set up the streams for the vehicle's truth.
+                slug = "/" * vehicle.name * "/" * vehicle.body.name * "/state/"
+                add!(log, slug, t[1], vehicle.body.state, nt)
 
-                # Set up the streams for the sensors.
-                for sensor in filter(s -> s.sense != nothing, vehicle.sensors)
-                    slug = "/" * vehicle.name * "/measurements/" * sensor.name * "/"
-                    num_samples = Int64(floor((scenario.sim.t_end - sensor.t_start) / sensor.dt)) + 1
-                    add!(log, slug, t[1], measurements[vehicle.name][sensor.name], num_samples)
+                # Set up the streams for the components.
+                for component in vehicle.components
+
+                    # TODO: State
+
+                    # TODO: Inputs
+
+                    # Outputs
+                    if component.outputs != nothing
+                        slug = "/" * vehicle.name * "/" * component.name * "/outputs/"
+                        num_samples = Int64(floor((scenario.sim.t_end - component.timing.t_start) / component.timing.dt)) + 1
+                        add!(log, slug, t[1], outputs[vehicle.name][component.name], num_samples)
+                    end
+
                 end
 
-                for software in vehicle.software
-                end
+                for computer in vehicle.computers
 
-                # Set up the streams for the actuators.
-                for actuator in filter(a -> a.sense != nothing, vehicle.actuators)
-                    slug = "/" * vehicle.name * "/measurements/" * actuator.name * "/"
-                    num_samples = Int64(floor((scenario.sim.t_end - actuator.t_start) / actuator.dt)) + 1
-                    add!(log, slug, t[1], measurements[vehicle.name][actuator.name], num_samples)
+                    # TODO: State
+
+                    # TODO: Inputs
+
+                    # Outputs
+                    if computer.board.outputs != nothing
+                        slug = "/" * vehicle.name * "/" * computer.name * "/" * computer.board.name * "/outputs/"
+                        num_samples = Int64(floor((scenario.sim.t_end - component.board.timing.t_start) / component.board.timing.dt)) + 1
+                        add!(log, slug, t[1], outputs[vehicle.name][computer.name][computer.board.name], num_samples)
+                    end
+
+                    for software in computer.software
+
+                        # TODO: State
+
+                        # TODO: Inputs
+
+                        # Outputs
+                        if software.outputs != nothing
+                            slug = "/" * vehicle.name * "/" * computer.name * "/" * software.name * "/outputs/"
+                            num_samples = Int64(floor((scenario.sim.t_end - software.timing.t_start) / software.timing.dt)) + 1
+                            add!(log, slug, t[1], outputs[vehicle.name][computer.name][software.name], num_samples)
+                        end
+
+                    end
+
                 end
 
             end
@@ -218,8 +259,8 @@ function simulate(scenario::Scenario)
         for k = 1:nt
 
             # Update the progress bar.
-            if scenario.sim.progress_fcn != nothing
-                if scenario.sim.progress_fcn((k-1)/nt) == false
+            if progress_fcn != nothing
+                if progress_fcn(k, nt) == false
                     break;
                 end
             end
@@ -228,122 +269,178 @@ function simulate(scenario::Scenario)
             # Propagate #
             #############
 
-            # Propagate from k-1 to k.
+            # Propagate from k-1 to k. We skip the first sample and just log for
+            # k == 1.
             if k > 1
 
-                # Propagate the continuous-time stuff to the current time.
-                propagate!(t[k-1], t[k], scenario, truth, commands, ϵ)
+                # Time step (s)
+                dt = t[k] - t[k-1]
 
-            end
+                #####################
+                # Continuous Update #
+                #####################
 
-            # Log the truth.
-            if isa(log, HDF5Logger.Log)
-                for vehicle in scenario.vehicles
-                    slug = "/" * vehicle.name * "/truth/"
-                    log!(log, slug, t[k], truth[vehicle.name])
+                # Extract all of the continuous states. (For now, only vehicle bodies have
+                # continuous-time states.)
+                states = [vehicle.body.state for vehicle in scenario.vehicles]
+                draws  = [draw(vehicle.body.rand, :derivatives) for vehicle in scenario.vehicles]
+                # TODO: Handle draws for actuators.
+
+                # Run Runge-Kutta 4 until we get an integrator passed into here.
+                Xd1 = continuous(t[k-1],         states,               scenario, inputs, draws)
+                Xd2 = continuous(t[k-1] + 0.5dt, states + 0.5dt * Xd1, scenario, inputs, draws)
+                Xd3 = continuous(t[k-1] + 0.5dt, states + 0.5dt * Xd2, scenario, inputs, draws)
+                Xd4 = continuous(t[k-1] +    dt, states +    dt * Xd3, scenario, inputs, draws)
+                states = states + dt/6. * Xd1 + dt/3. * Xd2 + dt/3. * Xd3 + dt/6. * Xd4
+
+                # Put back all of the states.
+                for (vehicle, state) in zip(scenario.vehicles, states)
+                    vehicle.body.state = state
                 end
+
+                # Get the effects on the current state. Note that this may
+                # actually be different from the effects we'll need at the
+                # beginning of the next propagation, because the discrete
+                # updates below can change their states (and hense resulting
+                # effects) instantly.
+                effects = get_effects(t, states, scenario, inputs)
+
+                ###################
+                # Discrete Update #
+                ###################
+
+                # Update components and computer boards.
+                for vehicle in scenario.vehicles
+
+                    # TODO: Might bodies have discrete updates?
+
+                    # Create an iterator over all of the effects for this vehicle for
+                    # convenience and speed.
+                    vehicle_effects = copy(effects[vehicle.name])
+
+                    # Update any sensor whose t_next has come.
+                    for component in vehicle.components
+                        if component.update != nothing && t[k] >= component.timing.t_next - ϵ
+
+                            # Update the state and get the measurement.
+                            component.state,
+                            outputs[vehicle.name][component.name] = component.update(
+                                t[k],
+                                component.constants,
+                                component.state,
+                                draw(component.rand, :update),
+                                vehicle_effects,
+                                inputs[vehicle.name][component.name],
+                                effects)
+
+                            # Update the next hit time.
+                            component.timing.count += 1
+                            component.timing.t_next = component.timing.dt * component.timing.count + component.timing.t_start
+
+                            # TODO: Log.
+
+                        end
+                    end
+
+                    # Update any sensor whose t_next has come.
+                    for computer in vehicle.computers
+                        if computer.board.update != nothing && t[k] >= computer.timing.t_next - ϵ
+
+                            # Update the state and get the measurement.
+                            computer.board.state,
+                            outputs[vehicle.name][computer.name][computer.board.name] = computer.board.update(
+                                t[k],
+                                computer.board.constants,
+                                computer.board.state,
+                                draw(computer.board.rand, :update),
+                                vehicle_effects,
+                                inputs[vehicle.name][computer.name][computer.board.name],
+                                effects)
+
+                            # Update the next hit time.
+                            computer.board.timing.count += 1
+                            computer.board.timing.t_next = computer.board.timing.dt * computer.board.timing.count + computer.board.timing.t_start
+
+                            # TODO: Log.
+
+                        end
+                    end
+
+                end
+
             end
+
+            ###################
+            # Software Update #
+            ###################
+
+            # TODO: Should this go inside the k > 1 check?
 
             # Update sensors, software, and actuators.
             for vehicle in scenario.vehicles
 
-                ###########
-                # Measure #
-                ###########
+                vehicle_outputs_km1  = deepcopy(outputs[vehicle.name])
+                vehicle_outputs_temp = deepcopy(vehicle_outputs_km1)
 
-                # Update any sensor whose t_next has come.
-                for sensor in filter(s -> t[k] >= s.t_next - ϵ, vehicle.sensors)
+                # If computers were components and all components had software
+                # to run...
+                for computer in vehicle.computers # Filter on "active" components?
 
-                    # Update the state and get the measurement.
-                    if sensor.sense != nothing
+                    # Each computer can overwrite outputs for each software.
 
-                        measurements[vehicle.name][sensor.name] =
-                            sensor.sense(t[k],
-                                         sensor.constants,
-                                         sensor.state,
-                                         draw(sensor.rand, :sense),
-                                         truth[vehicle.name],
-                                         truth)
+                    # Run each software, allowing subsequent processes to consume
+                    # inputs/outputs from prior processes on this component.
+                    for software in computer.software
+                        if software.update != nothing && t[k] >= software.timing.t_next
 
-                        # Log it.
-                        if isa(log, HDF5Logger.Log)
-                            slug = "/" * vehicle.name * "/measurements/" * sensor.name * "/"
-                            log!(log, slug, t[k], measurements[vehicle.name][sensor.name])
+                            # Any software of this computer can consume
+                            # inputs/outputs from the prior components. They cannot
+                            # see outputs from other components for this sample.
+
+                            # Update the inputs bus and outputs for this software.
+                            software.state,
+                            vehicle_outputs_temp[computer.name][software.name], # This software's outputs
+                            inputs[vehicle.name] = # Commands or software inputs for any other computer on this vehicle
+                                software.update(t[k],
+                                            software.constants,
+                                            software.state,
+                                            inputs[vehicle.name][computer.name][software.name], # Commands or software inputs from this vehicle
+                                            vehicle_outputs_temp, # Includes measurements and other software outputs
+                                            inputs[vehicle.name]) # To write to the inputs of other components
+
+                            # Update the next sample time.
+                            software.timing.count  += 1
+                            software.timing.t_next = software.timing.dt * software.timing.count + software.timing.t_start
+
+                            # Copy the updated outputs to the complete set of
+                            # updated outputs that won't be used again until the
+                            # next sample.
+                            outputs[vehicle.name][computer.name][software.name] = vehicle_outputs_temp[computer.name][software.name]
+
+                            # TODO: Log.
+
                         end
+                    end # software
 
-                    end
+                    # Now that we're done with this component, return any of the
+                    # modified outputs to their previous state.
+                    vehicle_outputs_temp[computer.name] = deepcopy(vehicle_outputs_km1[computer.name])
 
-                    # Update the next sample time.
-                    sensor.count  += 1
-                    sensor.t_next = sensor.dt * sensor.count + sensor.t_start
+                end # computer
 
-                end # each sensor
+                # The outputs bus has now been completely updated for this vehicle.
 
-                # Update any actuator whose t_next has come.
-                for actuator in filter(a -> t[k] >= a.t_next - ϵ, vehicle.actuators)
+            end # vehicle
 
-                    # Update the state and get the measurement.
-                    if actuator.sense != nothing
-
-                        measurements[vehicle.name][actuator.name] =
-                            actuator.sense(t[k],
-                                           actuator.constants,
-                                           actuator.state,
-                                           draw(actuator.rand, :sense),
-                                           commands[vehicle.name][actuator.name],
-                                           truth[vehicle.name],
-                                           truth)
-
-                        # Log it.
-                        if isa(log, HDF5Logger.Log)
-                            slug = "/" * vehicle.name * "/measurements/" * actuator.name
-                            log!(log, slug, t[k], measurements[vehicle.name][actuator.name])
-                        end
-                    end
-
-                    # Update the next sample time.
-                    actuator.count  += 1
-                    actuator.t_next = actuator.dt * actuator.count + actuator.t_start
-
-                end # each actuator
-
-                ############
-                # Software #
-                ############
-
-                # Update any software whose t_next has come.
-                for software in filter(s -> t[k] >= s.t_next - ϵ, vehicle.software)
-
-                    # Update the state and get the measurement.
-                    # Make this "next inputs, outputs, and command"?
-                    software.state,
-                    outputs[vehicle.name][software.name], # This software can only write to its own outputs.
-                    inputs[vehicle.name], # This software can write to anyone's inputs.
-                    commands[vehicle.name] = # Commands are really just actuator inputs.
-                        software.step(t[k],
-                                      software.constants,
-                                      software.state,
-                                      measurements[vehicle.name], # Can read fromm all sensors
-                                      inputs[vehicle.name][software.name], # This software can only read its own inputs.
-                                      outputs[vehicle.name], # It can read anyone's outputs.
-                                      inputs[vehicle.name], # It can write to anyone else's inputs (and should be considered write-only).
-                                      commands[vehicle.name]) # It can write to anything on the command bus (and should be considered write-only).
-
-                    # Update the next sample time.
-                    software.count  += 1
-                    software.t_next = software.dt * software.count + software.t_start
-
-                    # # Log it.
-                    # if isa(log, HDF5Logger.Log)
-                    #     slug = "/" * vehicle.name * "/software/" * software.name
-                    #     log!(log, slug, t[k], ???)
-                    # end
-
-                end # each software
-
+            # TODO: Or should we do all logging here?
+            if log != nothing
+                for vehicle in scenario.vehicles
+                    slug = "/" * vehicle.name * "/" * vehicle.body.name * "/state/"
+                    log!(log, slug, t[k], vehicle.body.state)
+                end
             end
 
-        end
+        end # sim loop
 
     catch err
 
@@ -368,28 +465,26 @@ function simulate(scenario::Scenario)
 
         # Shut down each vehicle first.
         for vehicle in scenario.vehicles
-            if isa(vehicle.body.shutdown, Function)
+
+            if vehicle.body.shutdown != nothing
                 vehicle.body.shutdown(t[k], vehicle.body.constants, vehicle.body.state)
             end
-        end
+            for component in vehicle.components
+                if component.shutdown != nothing
+                    component.shutdown(t[k], component.constants, component.state)
+                end
+            end
+            for computer in vehicle.computers
+                if computer.board.shutdown != nothing
+                    computer.board.shutdown(t[k], computer.board.constants, computer.board.state)
+                end
+                for software in computer.software
+                    if software.shutdown != nothing
+                        software.shutdown(t[k], software.constants, software.state)
+                    end
+                end
+            end
 
-        # Now initialize each vehicle's subsystems
-        for vehicle in scenario.vehicles
-            for sensor in vehicle.sensors
-                if isa(sensor.shutdown, Function)
-                    sensor.shutdown(t[k], sensor.constants, sensor.state)
-                end
-            end
-            for software in vehicle.software
-                if isa(software.shutdown, Function)
-                    software.shutdown(t[k], software.constants, software.state)
-                end
-            end
-            for actuator in vehicle.actuators
-                if isa(actuator.shutdown, Function)
-                    actuator.shutdown(t[k], actuator.constants, actuator.state)
-                end
-            end
         end
 
         # Close the log.
@@ -406,138 +501,106 @@ function simulate(scenario::Scenario)
     return scenario
 end
 
-# We can simulate a whole scenario directly from the file name.
-function simulate(file_name::String, context = current_module())
-    return simulate(setup(Scenario(), file_name, context))
-end
+# Empty progress function
+simulate(scenario::Scenario) = simulate(nothing, scenario)
 
-# Enable do-block syntax for the progress function.
-# TODO: Remove the progress_fcn field from scenario?
-function simulate(progress_fcn::Function, file_name::String, context = current_module())
-    scenario = setup(Scenario(), file_name, context)
-    scenario.sim.progress_fcn = progress_fcn
-    return simulate(scenario)
-end
+# Simulation from file name
+simulate(file_name::String, context = current_module()) = simulate(nothing, setup(Scenario(), file_name, context))
 
-# Enable do-block syntax for the progress function.
-# TODO: Remove the progress_fcn field from scenario?
-function simulate(progress_fcn::Function, scenario::Scenario)
-    scenario.sim.progress_fcn = progress_fcn
-    return simulate(scenario)
-end
+# Simulation from file name with progress function
+simulate(progress_fcn::Function, file_name::String, context = current_module()) = simulate(progress_fcn, setup(Scenario(), file_name, context))
 
-# Bring the states from t_{k-1} to t_k.
-function propagate!(t_km1, t_k, scenario, truth, commands, ϵ)
+# Get all of the effects on all vehicles for the current state.
+function get_effects(t, states, scenario, inputs)
 
-    # Time step (s)
-    dt = t_k - t_km1
+    # Get all of the effects. Start with the vehicle body. Planets can consume
+    # vehicle effects. Components can consume vehicle and planet effects.
 
-    #####################
-    # Continuous States #
-    #####################
-
-    # Extract all of the states. (For now, only vehicle bodies have
-    # continuous-time states.)
-    states = [vehicle.body.state for vehicle in scenario.vehicles]
-
-    # Run Runge-Kutta 4 until we get an integrator passed into here.
-    Xd1 = continuous(t_km1,         states,               scenario, commands)
-    Xd2 = continuous(t_km1 + 0.5dt, states + 0.5dt * Xd1, scenario, commands)
-    Xd3 = continuous(t_km1 + 0.5dt, states + 0.5dt * Xd2, scenario, commands)
-    Xd4 = continuous(t_km1 +    dt, states +    dt * Xd3, scenario, commands)
-    states = states + dt/6. * Xd1 + dt/3. * Xd2 + dt/3. * Xd3 + dt/6. * Xd4
-
-    # Put back all of the states.
-    for (vehicle, state) in zip(scenario.vehicles, states)
-        vehicle.body.state = state
+    effects = Dict{String, Dict{String, Tuple}}() # Instead of starting fresh, use the existing.
+    for k = 1:length(scenario.vehicles)
+        effects[scenario.vehicles[k].name] = Dict{String, Tuple}()
+        effects[scenario.vehicles[k].name][scenario.vehicles[k].body.name] =
+            scenario.vehicles[k].body.effects(
+                t, scenario.vehicles[k].body.constants, states[k], nothing)
     end
 
-    # Get the vehicle truths.
+    # Next, we'll get the effect of the environment on each body. While looping
+    # over the bodies, we don't want the effects from the first body to be
+    # visible to the second, so we'll need to make a copy here. We only need a
+    # copy and not a deep copy, because the old effects won't be changed; we
+    # simply need a dictionary that doesn't know about the new ones.
+    effects_bus_copy = copy(effects)
+
+    # Get the planet's effects, given the body's effects.
     for vehicle in scenario.vehicles
-        truth[vehicle.name] = vehicle.body.step(t_k, vehicle.body.constants, vehicle.body.state, nothing, scenario.planet)
-    end
-
-    ###################
-    # Discrete States #
-    ###################
-
-    # Propagate the sensors and actuators to the current time.
-
-    # Update sensors, software, and actuators.
-    for vehicle in scenario.vehicles
-
-        # Update any sensor whose t_next has come.
-        for sensor in filter(s -> s.step != nothing && t_k >= s.t_next - ϵ, vehicle.sensors)
-
-            # Update the state and get the measurement.
-            sensor.state =
-                sensor.step(t_k,
-                            sensor.constants,
-                            sensor.state,
-                            draw(sensor.rand, :step),
-                            truth[vehicle.name],
-                            truth)
-
-            # Note: we don't update next hit time here (t_next), because we'll
-            # do that when we "sense" for this sensor.
-
-        end # each sensor
-
-        # Update any actuator whose t_next has come.
-        for actuator in filter(a -> a.step != nothing && t_k >= a.t_next - ϵ, vehicle.actuators)
-
-            # Update the state and get the measurement.
-            actuator.state =
-                actuator.step(t_k,
-                              actuator.constants,
-                              actuator.state,
-                              draw(actuator.rand, :step),
-                              commands[vehicle.name][actuator.name],
-                              truth[vehicle.name],
-                              truth)
-
-            # Note: we don't update next hit time here (t_next), because we'll
-            # do that when we "sense" for this actuator.
-
-        end # each sensor
-
-    end
-
-end
-
-function continuous(t, states, scenario, commands)
-
-    # Assemble the momentary truth as a function of momentary state.
-    # TODO: Can't we skip this for the first iteration?
-    # TODO: Change 'step' to 'truth'.
-    truth = Dict{String,Any}()
-    for (vehicle, state) in zip(scenario.vehicles, states)
-        truth[vehicle.name] = vehicle.body.step(t, vehicle.body.constants, state, nothing, scenario.planet)
-    end
-
-    # Create the set derivatives that we will write to below.
-    derivs = deepcopy(states) # If I knew what 'states' was, I could just create an empty set.
-    for (vehicle, state, k) in zip(scenario.vehicles, states, 1:length(states))
-
-        # Get all of the actuator forces.
-        forces = zeros(3, 2) # CentralForce with convert from LocalForce
-        for actuator in vehicle.actuators
-            forces += actuator.actuate(t,
-                                       actuator.constants,
-                                       actuator.state,
-                                       draw(actuator.rand, :actuate),
-                                       commands[vehicle.name][actuator.name],
-                                       truth[vehicle.name],
-                                       truth)
+        if scenario.environment.effects != nothing
+            effects[vehicle.name][scenario.environment.name] = scenario.environment.effects(t,
+                                     scenario.environment.constants,
+                                     scenario.environment.state,
+                                     draw(scenario.environment.rand, :effects), # TODO: This draw doesn't belong here. Same below.
+                                     effects_bus_copy[vehicle.name],
+                                     effects_bus_copy)
         end
+    end
+
+    # Get the actuators' effects, given the bodies' effects and planet's effects.
+    effects_bus_copy = copy(effects)
+    for vehicle in scenario.vehicles
+
+        # Get all of the component and computer board effects.
+        for component in vehicle.components
+            if component.effects != nothing
+                effects[vehicle.name][component.name] = component.effects(t,
+                                           component.constants,
+                                           component.state,
+                                           draw(component.rand, :effects),
+                                           inputs[vehicle.name][component.name],
+                                           effects_bus_copy[vehicle.name],
+                                           effects_bus_copy)
+            end
+        end
+        for computer in vehicle.computers
+            if computer.board.effects != nothing
+                effects[vehicle.name][computer.name] = computer.board.effects(t,
+                                           computer.board.constants,
+                                           computer.board.state,
+                                           draw(computer.board.rand, :effects),
+                                           inputs[vehicle.name][computer.name][computer.board.name],
+                                           effects_bus_copy[vehicle.name],
+                                           effects_bus_copy)
+            end
+        end
+
+    end
+
+    return effects
+
+end
+
+function continuous(t, states, scenario, inputs, draws)
+
+    effects = get_effects(t, states, scenario, inputs)
+
+    # Create the set of derivatives that we will write to below.
+    #
+    # If I knew what 'states' was, I could just create an empty set. Also,
+    # there's probably no advantage to creating this first. We should just
+    # create an empty vector of eltype(states) and then push! the new states
+    # into the vector.
+    derivs = deepcopy(states)
+
+    # Get the derivatives for each body.
+    for (vehicle, k) in zip(scenario.vehicles, 1:length(states))
 
         # Form the rate of change of the state (same type as state itself).
         derivs[k] = vehicle.body.derivatives(t,
                                              vehicle.body.constants,
-                                             state,
-                                             nothing, # TODO: Handle draws over continuous-time.
-                                             scenario.planet,
-                                             forces)
+                                             states[k],
+                                             draws[k],
+                                             effects[vehicle.name],
+                                             effects)
+
+        # TODO: Get derivatives for actuators.
 
     end
 
@@ -545,57 +608,102 @@ function continuous(t, states, scenario, commands)
 
 end
 
-function calculate_time_steps(tf::Float64, dt::Float64, dts::Vector{Float64}, t_start::Vector{Float64}, ϵ::Float64)
+function calculate_time_steps(scenario)
 
-    t      = 0.
-    ts     = Vector{Float64}() # array for time steps
-    ndst   = copy(t_start) # next discrete sample times
-    counts = zeros(Float64, length(dts)) # how many times each discrete process has triggered
+    tf = scenario.sim.t_end
+    dt = scenario.sim.dt
 
-    # We can't need more than the sum of each process triggering on its own.
-    # Create a counter so that, when it completes, we bail with an error.
-    count = Int64(tf / dt + sum(tf ./ dts))
+    # Timing slop. Discrete processes will occur when they're within this amount of
+    # time from when they're supposed to happen.
+    ϵ = eps(10 * scenario.sim.t_end)
 
-    # While we aren't already at the end of time...
-    while t < tf
-
-        # See if there's been a problem that's creating an infinite loop.
-        count -= 1
-        if count == 0
-            error("Maximum number of steps exhausted; something went wrong when calculating time steps.")
+    # Get all of the discrete time steps and start times.
+    dts      = Vector{Float64}()
+    t_starts = Vector{Float64}()
+    for vehicle in scenario.vehicles
+        # TODO: Bodies might have discrete steps.
+        for component in Iterators.filter(c -> c.timing.dt != 0., vehicle.components)
+            push!(dts, component.timing.dt)
+            push!(t_starts, component.timing.t_start)
+            component.timing.t_next = component.timing.t_start
         end
-
-        # Find the next discrete sample time.
-        tn = minimum(ndst)
-        tn = min(tn, tf) # Don't step past the end of time.
-
-        # See how many steps we'll need to take between now and then. Create
-        # evenly-spaced steps between the points.
-        Δt      = tn - t
-        n_steps = ceil((Δt-ϵ)/dt)
-        Δt_fit  = Δt / n_steps
-
-        # Add on the evenly-spaced steps, up to the next discrete step.
-        for k = 1:n_steps-1
-            t += Δt_fit
-            push!(ts, t) # Pushing each is better than vcating (no copies).
-        end
-
-        # Now add on the discrete step. (Doing this allows the step to occur
-        # right at count * dt and avoids the accumulation of roundoff error over
-        # time.
-        t = tn
-        push!(ts, t)
-
-        # Update the times for the next steps of each discrete process.
-        for k = 1:length(dts)
-            if t > ndst[k] - ϵ
-                counts[k] += 1
-                ndst[k] = counts[k] * dts[k] + t_start[k]
+        for computer in vehicle.computers
+            if computer.board.timing.dt != 0.
+                push!(dts, computer.board.timing.dt)
+                push!(t_starts, computer.board.timing.t_start)
+                computer.board.timing.t_next = computer.board.timing.t_start
             end
+            for software in Iterators.filter(s -> s.timing.dt != 0., computer.software)
+                push!(dts, software.timing.dt)
+                push!(t_starts, software.timing.t_start)
+                software.timing.t_next = software.timing.t_start
+            end
+        end
+    end
+
+    # Make the time history.
+    if !isempty(dts)
+
+        t      = 0.
+        ts     = Vector{Float64}() # array for time steps
+        ndst   = copy(t_starts) # next discrete sample times
+        counts = zeros(Float64, length(dts)) # how many times each discrete process has triggered
+
+        # We can't need more than the sum of each process triggering on its own.
+        # Create a counter so that, when it completes, we bail with an error.
+        count = Int64(tf / dt + sum(tf ./ dts))
+
+        # While we aren't already at the end of time...
+        while t < tf
+
+            # See if there's been a problem that's creating an infinite loop.
+            count -= 1
+            if count == 0
+                error("Maximum number of steps exhausted; something went wrong when calculating time steps.")
+            end
+
+            # Find the next discrete sample time.
+            tn = minimum(ndst)
+            tn = min(tn, tf) # Don't step past the end of time.
+
+            # See how many steps we'll need to take between now and then. Create
+            # evenly-spaced steps between the points.
+            Δt      = tn - t
+            n_steps = ceil((Δt-ϵ)/dt)
+            Δt_fit  = Δt / n_steps
+
+            # Add on the evenly-spaced steps, up to the next discrete step.
+            for k = 1:n_steps-1
+                t += Δt_fit
+                push!(ts, t) # Pushing each is better than vcating (no copies).
+            end
+
+            # Now add on the discrete step. (Doing this allows the step to occur
+            # right at count * dt and avoids the accumulation of roundoff error over
+            # time.
+            t = tn
+            push!(ts, t)
+
+            # Update the times for the next steps of each discrete process.
+            for k = 1:length(dts)
+                if t > ndst[k] - ϵ
+                    counts[k] += 1
+                    ndst[k] = counts[k] * dts[k] + t_starts[k]
+                end
+            end
+
+        end
+
+    else
+
+        # Otherwise, we have no discrete times. Step at the maximum rate.
+        t = collect(0.:scenario.sim.dt:scenario.sim.t_end)
+        if t[end] != scenario.sim.t_end # Stop at exactly the end time.
+            push!(t, senario.sim.t_end)
         end
 
     end
 
-    return (ts, counts)
+    return (ts, ϵ, counts)
+
 end

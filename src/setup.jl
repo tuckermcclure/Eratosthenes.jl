@@ -98,12 +98,12 @@ function setup(model, specs::Dict, context::Module = current_module(), spacing::
 
                 x = Vector{eltype(getfield(model, field))}(length(value))
                 for k = 1:length(value)
-                    try # We put the try here so that the whole assignment gets skipped.
+                    # try # We put the try here so that the whole assignment gets skipped.
                         x[k] = setup(nothing, value[k], context, spacing * "  ")
-                    catch err
-                        display(err)
-                        println(spacing, "Attempting to carry on.")
-                    end
+                    # catch err
+                        # display(err)
+                        # println(spacing, "Attempting to carry on.")
+                    # end
                 end
                 setfield!(model, field, x)
 

@@ -7,37 +7,31 @@ the spacecraft with the ICRF.
 """
 function IdealPDController()
 
-    function init(args...)
-        return (nothing, # state
-                nothing, # inputs that I accept (anyone can write to these)
-                nothing) # my outputs (only I can write to these)
-    end
-
-    function step(t, constants, state, measurements, my_inputs, outputs, inputs, commands)
+    function step(t, constants, state, inputs, outputs_bus,
+                  inputs_bus) # for output only
 
         # Extract what we care about.
-        ω_BI_B = measurements["truth_sensor"].ω_BI_B
-        q_BI   = measurements["truth_sensor"].q_BI
+        ω_BI_B = outputs_bus["truth_sensor"].ω_BI_B
+        q_BI   = outputs_bus["truth_sensor"].q_BI
         q_TI   = constants # Target quaternion
 
         # Run the actual algorithm that will fly.
         (f_B, τ_B) = pd_controller(q_TI, q_BI, ω_BI_B)
 
         # Write out our command for the ideal actuator.
-        commands["ideal_actuator"] = [f_B τ_B]
+        inputs_bus["ideal_actuator"] = IdealActuatorCommand(f_B, τ_B)
 
-        return (state, nothing, inputs, commands)
+        return (state,      # Updated state (none)
+                nothing,    # Outputs
+                inputs_bus, # Updated inputs bus
+                true)       # Active
 
     end
 
-    Software("ideal_pd_controller",
-             init,
-             step,
-             nothing, # shutdown
-             0.05,
-             0.,
-             [0.; 0.; 0.; 1.], # constants: just a target quaternion
-             nothing)          # state
+    DynamicalModel("ideal_pd_controller",
+                   update = step,
+                   timing = ModelTiming(0.05),
+                   constants = [0.; 0.; 0.; 1.]) # target quaternion
 
 end
 
