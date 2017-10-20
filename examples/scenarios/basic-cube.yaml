@@ -5,20 +5,20 @@ sim:
   date_0: [2017, 6, 29, 17, 6, 32.2] # Simulation start date (UT1)
   log_file: out/basic-cube.h5
 environment:
-  model: LowEarthOrbit # Includes gravity, magnetic field, air density
+  model: LowEarthOrbit # Includes gravity, magnetic field, air density (or should environments be plural, and _each_ of these is a model?)
 vehicles:
   - model: Vehicle # Generic rigid body with inertial state
     name: cube1
-    body:
+    body: # No need to specify the model; the default body will do for us.
       constants:
         m: 55. # Mass of the body (kg); components can have their own masses via Mass effects
         I_B: [[5., 0., 0.],
               [0., 5., 0.],
               [0., 0., 5.]] # Central mass moment of inertia of the body (kg m^2)
-      state:
+      state: # state: (OrbitalElements(...), AttitudeType.LVLH())
         r_be_I: "[6378137.+350000., 0., 0.]" # Position of reference point b wrt COM of Earth in ICRF (m)
         v_be_I: "7600. * [0; cos(pi/4); sin(pi/4)]" # Rate of change of above (m/s)
-        q_BI:   "normalize([0.5; 1; 0.2; 0])" # Orientation of body wrt ICRF
+        q_BI:   "normalize([0.; 0.; 1.; 0.5])" # Orientation of body wrt ICRF
         ω_BI_B: [0., 0., 0.] # Rotation rate of body wrt ICRF, expressed in body (rad/s)
     components: # Low-level stuff, like sensors and actuators; these run "before" software on common timesteps.
       - model: Gyro # Generic gyro; uses finite difference of q_BI as average rate

@@ -52,9 +52,8 @@ function StarTrackerAndGyroController()
                     jitl,             # Default operation mode
                     UDPConnection(ip"192.168.1.3", 2000, 2001))
 
-    # This function initializes any dependencies and provides initial "inputs"
-    # and "outputs".
-    function init(t, constants, state, args...)
+    # This function always runs before the simulation starts up.
+    function startup(t, constants, state, args...)
         if constants.mode == sitl
             if is_windows()
                 constants.c_lib = Libdl.dlopen("3_c_code/windows/lib-pd-controller.dll")
@@ -66,7 +65,6 @@ function StarTrackerAndGyroController()
             println("Connecting to remote computer.")
             udp_connect(constants.conn)
         end
-        return (state, true)
     end
 
     # This function is called each time the controller trigger time is reached.
@@ -145,7 +143,8 @@ function StarTrackerAndGyroController()
     end
 
     DynamicalModel("star_tracker_and_gyro_controller",
-                   init = init,
+                   startup = startup,
+                   init = step,
                    update = step,
                    shutdown = shutdown,
                    timing = ModelTiming(0.05),  # Sample rate

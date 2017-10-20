@@ -1,5 +1,5 @@
 # Make sure we're running from the examples directory.
-cd(@__DIR__())
+# cd(@__DIR__())
 
 reload("Eratosthenes")
 sleep(0.1)
@@ -11,7 +11,7 @@ using BenchmarkTools
 using Eratosthenes # Bring in the top-level sim environment.
 using Plots # For plotting (Pkg.add("Plots"); Pkg.add("PyPlot");)
 import HDF5 # For loading the log file (Pkg.add("HDF5");)
-import Juno # For the progress bar
+# import Juno # For the progress bar
 
 # Include a module that's not part of Eratosthenes itself. Anything we "use"
 # here will be visible during the setup portion of the scenario. So we can
@@ -21,31 +21,41 @@ using .EratosthenesExampleSoftware
 
 # Create the hierarchy of objects used by the sim.
 scenario = setup("scenarios/basic-cube.yaml")
-# scenario.sim.log_file = "";
 
+# # Just run it.
 # simulate(scenario)
 
+# # Profile it.
+# scenario.sim.log_file = "";
 # @profile simulate(scenario)
-# open("prof.txt", "w") do s
+# open("profiler.txt", "w") do s
 #     Profile.print(IOContext(s, :displaysize => (24, 500)))
 # end
 # Profile.clear()
 
+# Run it with text progress (e.g., from VS Code).
+simulate(scenario) do k, n
+    if k % 50 == 0
+        println(100*k/n, "% done.")
+    end
+    return true
+end
+
 # Create a Juno waitbar. This do-block syntax makes sure it gets "closed" even
 # if there's an error.
-Juno.progress(name="Simulating...") do progress_bar
-
-    # Run the simulation. Anything inside this do-block will be run at the
-    # beginning of every major time step. This is useful for updating a progress
-    # bar or a plot.
-    simulate(scenario) do k, n
-        if k % 30 == 0
-            Juno.progress(progress_bar, (k-1)/n) # Update Juno's progress bar.
-        end
-        return true # Return false to end the sim.
-    end
-
-end
+# Juno.progress(name="Simulating...") do progress_bar
+#
+#     # Run the simulation. Anything inside this do-block will be run at the
+#     # beginning of every major time step. This is useful for updating a progress
+#     # bar or a plot.
+#     simulate(scenario) do k, n
+#         if k % 30 == 0
+#             Juno.progress(progress_bar, (k-1)/n) # Update Juno's progress bar.
+#         end
+#         return true # Return false to end the sim.
+#     end
+#
+# end
 
 # Open the logs and plot some things.
 if !isempty(scenario.sim.log_file)
@@ -71,7 +81,8 @@ if !isempty(scenario.sim.log_file)
     #t_gyro = squeeze(t_gyro, 1)
 
     # Choose a friendly plotting package. PyPlot behaves nicely.
-    pyplot()
+    # pyplot()
+    plotlyjs()
 
     # Define each plot that we'll need.
     p1 = plot(t, q_BI.',
@@ -82,8 +93,8 @@ if !isempty(scenario.sim.log_file)
               ylabel = "Rotation Rate (deg/s)")
 
     # Save the individual plots before showing them together.
-    savefig(p1, "out/sim-results-q.png")
-    savefig(p2, "out/sim-results-ω.png")
+    # savefig(p1, "out/sim-results-q.png")
+    # savefig(p2, "out/sim-results-ω.png")
 
     # Display those plots as subplots using the default "2" layout. Put any
     # common descriptors here.

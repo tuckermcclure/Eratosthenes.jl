@@ -7,7 +7,7 @@ This is the primary simulation function that begins with a set up scenario and
 propagates until the end of time.
 
 """
-function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario)
+function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_init::Bool = true)
 
     # Create the log.
     if !isempty(scenario.sim.log_file)
@@ -47,154 +47,243 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario)
     k = 1
     try
 
-        ##################
-        # Component Init #
-        ##################
+        ###########
+        # Startup #
+        ###########
+
+        if scenario.environment.startup != nothing
+            scenario.environment.startup(t[1], scenario.environment.constants, scenario.environment.state)
+        end
+
+        for vehicle in scenario.vehicles
+
+            if vehicle.body.startup != nothing
+                vehicle.body.startup(t[1], vehicle.body.constants, vehicle.body.state)
+            end
+            for component in vehicle.components
+                if component.startup != nothing
+                    component.startup(t[1], component.constants, component.state)
+                end
+            end
+            for computer in vehicle.computers
+                if computer.board.startup != nothing
+                    computer.board.startup(t[1], computer.board.constants, computer.board.state)
+                end
+                for software in computer.software
+                    if software.startup != nothing
+                        software.startup(t[1], software.constants, software.state)
+                    end
+                end
+            end
+
+        end
+
+        ########
+        # Init #
+        ########
 
         # We'll initialize the state for each model and get the inputs and
         # outputs from the appropriate components.
 
-        # Initialize the environment.
-        if scenario.environment.init != nothing
-            scenario.environment.init(t[1],
-                                      scenario.environment.constants,
-                                      scenario.environment.state,
-                                      draw(scenario.environment.rand, :init))
-        end
+        # TODO: If this init process is meant to set everything up for t=0+,
+        # then shouldn't it also allow software to write to inputs bus? E.g.,
+        # should the software be able to issue commands to the actuators right
+        # upon initialization?
 
-        # Initialize the vehicles.
+        # TODO: Much of the below looks redundant. Make little functions for this stuff.
+
+        # Set up input and output buses.
         for vehicle in scenario.vehicles
-
-            effects[vehicle.name] = Dict{String,Tuple}()
-
-            # Initialize each vehicle body before doing components.
-            if vehicle.body.init != nothing
-                vehicle.body.state =
-                    vehicle.body.init(t[1],
-                                      vehicle.body.constants,
-                                      vehicle.body.state,
-                                      draw(vehicle.body.rand, :init))
-            end
-            if vehicle.body.effects != nothing
-                effects[vehicle.name][vehicle.body.name] =
-                    vehicle.body.effects(t[1],
-                                         vehicle.body.constants,
-                                         vehicle.body.state,
-                                         draw(vehicle.body.rand, :effects))
-            else
-                effects[vehicle.name][vehicle.body.name] = () # TODO: Do I need this?
-            end
-
-            # Get the effects of the environment on the body.
-            if scenario.environment.effects != nothing
-                effects[vehicle.name][scenario.environment.name] =
-                    scenario.environment.effects(t[1],
-                                                 scenario.environment.constants,
-                                                 scenario.environment.state,
-                                                 draw(scenario.environment.rand, :effects),
-                                                 effects[vehicle.name],
-                                                 effects)
-            else
-                effects[vehicle.name][scenario.environment.name] = ()
-            end
-
-        end
-
-        # Now initialize each vehicle's subsystems.
-        for vehicle in scenario.vehicles
-
             inputs[vehicle.name]  = Dict{String,Any}()
             outputs[vehicle.name] = Dict{String,Any}()
-
+            inputs[vehicle.name][vehicle.body.name]  = vehicle.body.inputs
+            outputs[vehicle.name][vehicle.body.name] = vehicle.body.outputs
             for component in vehicle.components
-
-                if component.init != nothing
-                    component.state, = component.init(
-                        t[1],
-                        component.constants,
-                        component.state,
-                        draw(component.rand, :init),
-                        effects[vehicle.name],
-                        effects)
-                end
-
-                if component.effects != nothing
-                    effects[vehicle.name][component.name] = component.effects(
-                        t[1],
-                        component.constants,
-                        component.state,
-                        draw(component.rand, :effects),
-                        component.inputs,
-                        effects[vehicle.name],
-                        effects) # TODO: Limit this to the body and environment effects.
-                end
-
                 inputs[vehicle.name][component.name]  = component.inputs
                 outputs[vehicle.name][component.name] = component.outputs
-
             end
-
             for computer in vehicle.computers
-
                 inputs[vehicle.name][computer.name]  = Dict{String,Any}()
                 outputs[vehicle.name][computer.name] = Dict{String,Any}()
-
-                if computer.board.init != nothing
-                    computer.board.state = computer.board.init(
-                        t[1],
-                        computer.board.constants,
-                        computer.board.state,
-                        draw(computer.board.rand, :init),
-                        effects[vehicle.name],
-                        effects)
-                end
-                if computer.board.effects != nothing
-                    effects[vehicle.name][computer.name][computer.board.name] = computer.board.effects(
-                        t[1],
-                        computer.board.constants,
-                        computer.board.state,
-                        draw(computer.board.rand, :effects),
-                        computer.board.inputs,
-                        effects[vehicle.name],
-                        effects) # TODO: Limit this to the body and environment effects.
-                end
-
+                inputs[vehicle.name][computer.name][computer.board.name]  = computer.board.inputs
+                outputs[vehicle.name][computer.name][computer.board.name] = computer.board.outputs
                 for software in computer.software
-
-                    if software.init != nothing
-                        software.state, = software.init(t[1],
-                                                       software.constants,
-                                                       software.state)
-                    end
-
                     inputs[vehicle.name][computer.name][software.name]  = software.inputs
                     outputs[vehicle.name][computer.name][software.name] = software.outputs
-
                 end
+            end
+        end
+
+        # If the states and outputs are totally initialized already, we don't
+        # need to run init.
+        if needs_init
+
+            # Initialize the environment.
+            if scenario.environment.init != nothing
+                scenario.environment.state =
+                    scenario.environment.init(t[1],
+                                              scenario.environment.constants,
+                                              scenario.environment.state,
+                                              draw(scenario.environment.rand, :init))
+            end
+
+            # Initialize the vehicles.
+            for vehicle in scenario.vehicles
+
+                effects[vehicle.name] = Dict{String,Tuple}()
+
+                # Initialize each vehicle body before doing components.
+                if vehicle.body.init != nothing
+                    vehicle.body.state =
+                        vehicle.body.init(t[1],
+                                          vehicle.body.constants,
+                                          vehicle.body.state,
+                                          draw(vehicle.body.rand, :init))
+                end
+
+                # Get the body's effects.
+                if vehicle.body.effects != nothing
+                    effects[vehicle.name][vehicle.body.name] =
+                        vehicle.body.effects(t[1],
+                                             vehicle.body.constants,
+                                             vehicle.body.state,
+                                             draw(vehicle.body.rand, :effects))
+                else
+                    #effects[vehicle.name][vehicle.body.name] = () # TODO: Do I need this?
+                end
+
+                # Get the effects of the environment on the body.
+                if scenario.environment.effects != nothing
+                    effects[vehicle.name][scenario.environment.name] =
+                        scenario.environment.effects(t[1],
+                                                     scenario.environment.constants,
+                                                     scenario.environment.state,
+                                                     draw(scenario.environment.rand, :effects),
+                                                     effects[vehicle.name],
+                                                     effects)
+                else
+                    #effects[vehicle.name][scenario.environment.name] = ()
+                end
+
+                # TODO: Both Bodies and Environments could produce outputs.
 
             end
 
-        end
+            # Now initialize each vehicle's subsystems.
+            for vehicle in scenario.vehicles
+
+                for component in vehicle.components
+
+                    if component.init != nothing
+                        component.state, outputs[vehicle.name][component.name] = component.init(
+                            t[1],
+                            component.constants,
+                            component.state,
+                            draw(component.rand, :init),
+                            inputs[vehicle.name][component.name],
+                            effects[vehicle.name],
+                            effects)
+                    end
+
+                    if component.effects != nothing
+                        effects[vehicle.name][component.name] = component.effects(
+                            t[1],
+                            component.constants,
+                            component.state,
+                            draw(component.rand, :effects),
+                            inputs[vehicle.name][component.name],
+                            effects[vehicle.name],
+                            effects) # TODO: Limit this to the body and environment effects.
+                    end
+
+                    # This counts as a "tick" of the system if this would have
+                    # been an appropriate time for a step anyway.
+                    if t[k] >= component.timing.t_next - ϵ
+                        component.timing.count = 1
+                        component.timing.t_next = component.timing.dt + component.timing.t_start
+                    end
+
+                end # for each component
+
+                for computer in vehicle.computers
+
+                    if computer.board.init != nothing
+                        computer.board.state,
+                        outputs[vehicle.name][computer.name][computer.board.name] =
+                            computer.board.init(
+                                t[1],
+                                computer.board.constants,
+                                computer.board.state,
+                                draw(computer.board.rand, :init),
+                                inputs[vehicle.name][computer.name][computer.board.name],
+                                effects[vehicle.name],
+                                effects)
+                    end
+
+                    if computer.board.effects != nothing
+                        effects[vehicle.name][computer.name][computer.board.name] =
+                            computer.board.effects(
+                                t[1],
+                                computer.board.constants,
+                                computer.board.state,
+                                draw(computer.board.rand, :effects),
+                                inputs[vehicle.name][computer.name][computer.board.name],
+                                effects[vehicle.name],
+                                effects) # TODO: Limit this to the body and environment effects.
+                    end
+
+                    # This counts as a "tick" of the system if this would have
+                    # been an appropriate time for a step anyway.
+                    if t[k] >= computer.board.timing.t_next - ϵ
+                        computer.board.timing.count = 1
+                        computer.board.timing.t_next = computer.board.timing.dt + computer.board.timing.t_start
+                    end
+
+                    for software in computer.software
+
+                        if software.init != nothing
+                            software.state,
+                            outputs[vehicle.name][computer.name][software.name] =
+                                software.init(
+                                    t[1],
+                                    software.constants,
+                                    software.state,
+                                    inputs[vehicle.name][computer.name][software.name],
+                                    outputs[vehicle.name],
+                                    inputs[vehicle.name])
+                        end
+
+                        # This counts as a "tick" of the system if this would have
+                        # been an appropriate time for a step anyway.
+                        if t[k] >= software.timing.t_next - ϵ
+                            software.timing.count = 1
+                            software.timing.t_next = software.timing.dt + software.timing.t_start
+                        end
+
+                    end
+
+                end # for each computer
+
+            end # for each vehicle
+
+        end # if needs_init
 
         # We now have the state of, inputs to, and outputs from all of pieces of
         # the simulation for the first sample. We also have all of the effects
         # resulting from the current state.
-        #
-        # I would like for the software to begin commanding immediately. Perhaps
-        # the init function should also allow everything to update its outputs
-        # and write to the inputs of others. How does this interact with the
-        # idea that we can start the sim in a specific state, e.g. from half-way
-        # through a previous run? TODO
 
         ############
         # Log Init #
         ############
 
+        # TODO: So that a sim can be recreated from a log, shouldn't we log the
+        # sim parameters too? How do we log t_next/t_start?
+
         # Preallocate space for the streams we'll need in the logger.
-        # TODO: Log on the first sample.
         if log != nothing
 
-            println("Setting up log.")
+            # TODO: Log environment.
+
             for vehicle in scenario.vehicles
 
                 ## Set up the streams for the vehicle's truth.
@@ -329,8 +418,8 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario)
                                 component.constants,
                                 component.state,
                                 draw(component.rand, :update),
-                                vehicle_effects,
                                 inputs[vehicle.name][component.name],
+                                vehicle_effects,
                                 effects)
 
                             # Update the next hit time.
@@ -353,8 +442,8 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario)
                                 computer.board.constants,
                                 computer.board.state,
                                 draw(computer.board.rand, :update),
-                                vehicle_effects,
                                 inputs[vehicle.name][computer.name][computer.board.name],
+                                vehicle_effects,
                                 effects)
 
                             # Update the next hit time.
@@ -368,72 +457,72 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario)
 
                 end
 
-            end
+                ###################
+                # Software Update #
+                ###################
 
-            ###################
-            # Software Update #
-            ###################
+                # Update sensors, software, and actuators.
+                for vehicle in scenario.vehicles
 
-            # TODO: Should this go inside the k > 1 check?
+                    vehicle_outputs_km1  = deepcopy(outputs[vehicle.name])
+                    vehicle_outputs_temp = deepcopy(vehicle_outputs_km1)
 
-            # Update sensors, software, and actuators.
-            for vehicle in scenario.vehicles
+                    # If computers were components and all components had software
+                    # to run...
+                    for computer in vehicle.computers # Filter on "active" components?
 
-                vehicle_outputs_km1  = deepcopy(outputs[vehicle.name])
-                vehicle_outputs_temp = deepcopy(vehicle_outputs_km1)
+                        # Each computer can overwrite outputs for each software.
 
-                # If computers were components and all components had software
-                # to run...
-                for computer in vehicle.computers # Filter on "active" components?
+                        # Run each software, allowing subsequent processes to consume
+                        # inputs/outputs from prior processes on this component.
+                        for software in computer.software
+                            if software.update != nothing && t[k] >= software.timing.t_next
 
-                    # Each computer can overwrite outputs for each software.
+                                # Any software of this computer can consume
+                                # inputs/outputs from the prior components. They cannot
+                                # see outputs from other components for this sample.
 
-                    # Run each software, allowing subsequent processes to consume
-                    # inputs/outputs from prior processes on this component.
-                    for software in computer.software
-                        if software.update != nothing && t[k] >= software.timing.t_next
+                                # Update the inputs bus and outputs for this software.
+                                software.state,
+                                vehicle_outputs_temp[computer.name][software.name], # This software's outputs
+                                inputs[vehicle.name] = # Commands or software inputs for any other computer on this vehicle
+                                    software.update(t[k],
+                                                software.constants,
+                                                software.state,
+                                                inputs[vehicle.name][computer.name][software.name], # Commands or software inputs from this vehicle
+                                                vehicle_outputs_temp, # Includes measurements and other software outputs
+                                                inputs[vehicle.name]) # To write to the inputs of other components
 
-                            # Any software of this computer can consume
-                            # inputs/outputs from the prior components. They cannot
-                            # see outputs from other components for this sample.
+                                # Update the next sample time.
+                                software.timing.count  += 1
+                                software.timing.t_next = software.timing.dt * software.timing.count + software.timing.t_start
 
-                            # Update the inputs bus and outputs for this software.
-                            software.state,
-                            vehicle_outputs_temp[computer.name][software.name], # This software's outputs
-                            inputs[vehicle.name] = # Commands or software inputs for any other computer on this vehicle
-                                software.update(t[k],
-                                            software.constants,
-                                            software.state,
-                                            inputs[vehicle.name][computer.name][software.name], # Commands or software inputs from this vehicle
-                                            vehicle_outputs_temp, # Includes measurements and other software outputs
-                                            inputs[vehicle.name]) # To write to the inputs of other components
+                                # Copy the updated outputs to the complete set of
+                                # updated outputs that won't be used again until the
+                                # next sample.
+                                outputs[vehicle.name][computer.name][software.name] = vehicle_outputs_temp[computer.name][software.name]
 
-                            # Update the next sample time.
-                            software.timing.count  += 1
-                            software.timing.t_next = software.timing.dt * software.timing.count + software.timing.t_start
+                                # TODO: Log.
 
-                            # Copy the updated outputs to the complete set of
-                            # updated outputs that won't be used again until the
-                            # next sample.
-                            outputs[vehicle.name][computer.name][software.name] = vehicle_outputs_temp[computer.name][software.name]
+                            end
+                        end # software
 
-                            # TODO: Log.
+                        # Now that we're done with this component, return any of the
+                        # modified outputs to their previous state.
+                        vehicle_outputs_temp[computer.name] = deepcopy(vehicle_outputs_km1[computer.name])
 
-                        end
-                    end # software
+                    end # computer
 
-                    # Now that we're done with this component, return any of the
-                    # modified outputs to their previous state.
-                    vehicle_outputs_temp[computer.name] = deepcopy(vehicle_outputs_km1[computer.name])
+                    # The outputs bus has now been completely updated for this vehicle.
 
-                end # computer
+                end # for each vehicle
 
-                # The outputs bus has now been completely updated for this vehicle.
+            end # k > 1
 
-            end # vehicle
-
-            # TODO: Or should we do all logging here?
+            # Log everything that needs it.
             if log != nothing
+                # println("Logging at t=", t[k])
+                # TODO: Log everything that has changed on this sample.
                 for vehicle in scenario.vehicles
                     slug = "/" * vehicle.name * "/" * vehicle.body.name * "/state/"
                     log!(log, slug, t[k], vehicle.body.state)
