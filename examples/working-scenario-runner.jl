@@ -7,7 +7,6 @@ sleep(0.1)
 module Temp
 
 using BenchmarkTools
-
 using Eratosthenes # Bring in the top-level sim environment.
 using Plots # For plotting (Pkg.add("Plots"); Pkg.add("PyPlot");)
 import HDF5 # For loading the log file (Pkg.add("HDF5");)
@@ -35,8 +34,8 @@ scenario = setup("scenarios/basic-cube.yaml")
 
 # Run it with text progress (e.g., from VS Code).
 simulate(scenario) do k, n
-    if k % 50 == 0
-        println(100*k/n, "% done.")
+    if (k-1) % 100 == 0
+        @printf("Progress: % 5.1f%% done.\n", round(100*(k-1)/(n-1), 1))
     end
     return true
 end
