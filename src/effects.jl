@@ -26,10 +26,10 @@ function find_effect(effects_bus::Dict{String, Tuple}, null_effect::T) where T
     for effects in values(effects_bus) # effects contains tuple of Effects from each component
         index = findfirst(e->isa(e, T), effects)
         if !iszero(index)
-            return (effects[index], index)
+            return (effects[index], true)
         end
     end
-    return (null_effect, 0)
+    return (null_effect, false)
 end
 
 # Find a single instance of an effect in a vector of effects.

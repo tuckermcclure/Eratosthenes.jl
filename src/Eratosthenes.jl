@@ -55,7 +55,7 @@ mutable struct ModelTiming
     ModelTiming(dt = 0., t_start = 0., t_next = 0., count = 0) = new(dt, t_start, t_next, count)
 end
 
-mutable struct DynamicalModel{FI, FE, FD, FU, FS, DC, DS, DI, DO}
+mutable struct DynamicalModel{F0, FI, FE, FD, FU, FS, DC, DS, DI, DO}
 
     name::String # Actually used as a key in a dictionary, as well as for logging
 
@@ -66,6 +66,7 @@ mutable struct DynamicalModel{FI, FE, FD, FU, FS, DC, DS, DI, DO}
     # out of the mutable things, then we'll remove this parameterization here
     # but keep it for the immutable version for speed there.
     #
+    startup::F0 # Called to allow one to set up resources or whatever.
     init::FI # "Tell me what you produce."
     effects::FE # "Produce physical effects."
     derivatives::FD # "Tell me how the state is changing."
@@ -86,6 +87,7 @@ end
 
 # Create a convenience constructor with lots of defaults.
 DynamicalModel(name;
+               startup = nothing,
                init = nothing,
                effects = nothing,
                derivatives = nothing,
@@ -97,7 +99,7 @@ DynamicalModel(name;
                inputs = nothing,
                outputs = nothing,
                rand = RandSpec()) =
-    DynamicalModel(name, init, effects, derivatives, update, shutdown, timing, constants, state, inputs, outputs, rand)
+    DynamicalModel(name, startup, init, effects, derivatives, update, shutdown, timing, constants, state, inputs, outputs, rand)
 
 # Convenience constructors
 # Body(name, init, effects, derivatives, shutdown, timing, constants, state, rand = RandSpec()) =

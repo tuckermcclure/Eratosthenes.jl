@@ -8,12 +8,12 @@ function TruthSensor()
     # function init(t, constants, state, draws, inputs, effects, effects_bus)
     #     return state
     # end
-    function sense(t, constants, state, draws, effects, inputs, effects_bus)
+    function sense(t, constants, state, draws, inputs, effects, effects_bus)
         body, = find_effect(effects, BodyStateEffect())
         return (state, body, true)
     end
     DynamicalModel("truth_sensor",
-                   #init = init,
+                   init = sense,
                    update = sense,
                    outputs = BodyStateEffect(),
                    timing = ModelTiming(0.02))
@@ -30,18 +30,18 @@ function StarTracker()
     # function init(t, constants, state, draws, body_effects)
     #     return (nothing, [0., 0., 0., 1.])
     # end
-    function sense(t, constants, state, draws, effects, inputs, effects_bus)
+    function sense(t, constants, state, draws, inputs, effects, effects_bus)
         errors = constants .* draws
         body, = find_effect(effects, BodyStateEffect())
         return (state, qcomp(mrp2q(errors), body.q_BI), true)
     end
     DynamicalModel("default_star_tracker",
-                   #init,
+                   init = sense,
                    update = sense,
                    timing = ModelTiming(0.1), # 10Hz update rate
                    constants = [0.001, 0.001, 0.001], # constants: error magnitudes (rad)
                    outputs = [0.; 0.; 0.; 1.],
-                   rand = RandSpec(update=3)) # rand
+                   rand = RandSpec(init=3,update=3)) # rand
 end
 
 """
@@ -65,15 +65,16 @@ mutable struct GyroState
 end
 
 function Gyro()
-    function init(t, constants, state, draws, effects, effects_bus)
-        # TODO: How to allow the user to specify the state, e.g. to recreate a run?
+    function init(t, constants, state, draws, inputs, effects, effects_bus)
         initial_bias = constants.initial_bias_magnitude * (2. * draws[1:3] - 1.)
         body, = find_effect(effects, BodyStateEffect())
         return (GyroState(initial_bias, body.q_BI, t),
+                body.ω_BI_B, # Outputs
                 true) # Active?
     end
-    function update(t, constants, state, draws, effects, inputs, effects_bus)
-        body,  = find_effect(effects, BodyStateEffect())
+    function update(t, constants, state, draws, inputs, effects, effects_bus)
+        body, found  = find_effect(effects, BodyStateEffect())
+        if !found; error("The Gyro model requires a BodyState effect but could not find one."); end
         Δt     = t - state.t # It would be nice if models had access to their own dt.
         σ_rate = Δt > 0. ? constants.angular_random_walk / √(Δt) : 0. # These could be saved to constants for a fixed time step, which would save us from dividing by zero at the first sample.
         σ_bias = constants.bias_random_walk * √(Δt)

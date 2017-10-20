@@ -23,12 +23,13 @@ function IdealPDController()
 
         return (state,      # Updated state (none)
                 nothing,    # Outputs
-                inputs_bus, # Updated inputs bus
+                inputs_bus, # Updated inputs bus (this is not necessary)
                 true)       # Active
 
     end
 
     DynamicalModel("ideal_pd_controller",
+                   init = step,
                    update = step,
                    timing = ModelTiming(0.05),
                    constants = [0.; 0.; 0.; 1.]) # target quaternion
