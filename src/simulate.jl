@@ -796,3 +796,36 @@ function calculate_time_steps(scenario)
     return (ts, ϵ, counts)
 
 end
+
+function mc(scenario::Scenario, n::Int)
+
+    function mchelper(scenario::Scenario, k::Int)
+        println("Running MC variation ", k, " on worker ", myid())
+        scenario.sim.seed = k
+        scenario.sim.log_file = "out/mc" * string(k) * ".h5"
+        simulate(scenario)
+    end
+
+    pmap(k -> mchelper(scenario, k), 1:n)
+
+end
+
+# function foo(m1, m2, k)
+#
+#     srand(k)
+#
+#     Eratosthenes.seed(m1, true)
+#     Eratosthenes.seed(m2, true)
+#
+#     d1 = hcat(Eratosthenes.draw(m1, :update), Eratosthenes.draw(m1, :update))
+#     d2 = hcat(Eratosthenes.draw(m2, :update), Eratosthenes.draw(m2, :update))
+#
+#     x = [d1[end]; d2[end]; myid()]
+#
+#     return x
+#
+# end
+#
+# function mct(m1, m2, n::Int)
+#     pmap(k -> foo(m1, m2, k), 1:n)
+# end
