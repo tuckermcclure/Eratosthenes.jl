@@ -35,7 +35,7 @@ export LowEarthOrbit, TruthSensor, StarTracker, Gyro, IdealActuator # Models
 export IdealActuatorCommand
 export NoEffect, Gravity, BodyTorque, BodyForce
 export find_effect, accumulate!
-export setup, simulate
+export setup, simulate, mc
 export Scenario, SimParams
 
 # Used to tell integrator how to add.
