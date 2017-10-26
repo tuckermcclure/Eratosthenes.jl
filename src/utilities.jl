@@ -11,6 +11,12 @@ end
     :( T($(expr...)) ) # Splat them into an expression for a constructor for a T type
 end
 
+# We use this to ignore nothing states when adding them together.
+Base.:+(a::Void, b)       = b
+Base.:+(a, b::Void)       = a
+Base.:+(a::Void, b::Void) = a
+Base.:*(a, b::Void)       = b
+
 # There are built-in types for UT date-times, but they don't work the way that I
 # want. This isn't mutable. Just make a new one when something needs to be
 # different.
