@@ -293,7 +293,16 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 # Set up the streams for the components.
                 for component in vehicle.components
 
-                    # TODO: State
+                    # State
+                    if component.state != nothing
+                        slug = "/" * vehicle.name * "/" * component.name * "/state/"
+                        if component.derivatives != nothing
+                            num_samples = nt
+                        else
+                            num_samples = Int64(floor((scenario.sim.t_end - component.timing.t_start) / component.timing.dt)) + 1
+                        end
+                        add!(log, slug, t[1], component.state, num_samples)
+                    end
 
                     # TODO: Inputs
 
@@ -358,8 +367,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
             # Propagate #
             #############
 
-            # Propagate from k-1 to k. We skip the first sample and just log for
-            # k == 1.
+            # Propagate from k-1 to k. We skip the first sample and just log it.
             if k > 1
 
                 # Time step (s)
@@ -369,11 +377,26 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 # Continuous Update #
                 #####################
 
-                # Extract all of the continuous states. (For now, only vehicle bodies have
-                # continuous-time states.)
-                states = [vehicle.body.state for vehicle in scenario.vehicles]
-                draws  = [draw(vehicle.body.rand, :derivatives) for vehicle in scenario.vehicles]
-                # TODO: Handle draws for actuators.
+                # Put all of the continuous-time states in a vector.
+                states = []
+                draws  = []
+                # TODO: Add environments; they should be able to have continuous states.
+                for vehicle in scenario.vehicles
+                    push!(states, vehicle.body.state)
+                    push!(draws,  draw(vehicle.body.rand, :derivatives))
+                end
+                for vehicle in scenario.vehicles
+                    for component in vehicle.components
+                        push!(states, component.state)
+                        push!(draws, draw(component.rand, :derivatives))
+                    end
+                    for computer in vehicle.computers
+                        push!(states, computer.board.state)
+                        push!(draws, draw(computer.board.rand, :derivatives))
+                    end
+                end
+                # states = [vehicle.body.state for vehicle in scenario.vehicles]
+                # draws  = [draw(vehicle.body.rand, :derivatives) for vehicle in scenario.vehicles]
 
                 # Run Runge-Kutta 4 until we get an integrator passed into here.
                 Xd1 = continuous(t[k-1],         states,               scenario, inputs, draws)
@@ -383,8 +406,19 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 states = states + dt/6. * Xd1 + dt/3. * Xd2 + dt/3. * Xd3 + dt/6. * Xd4
 
                 # Put back all of the states.
-                for (vehicle, state) in zip(scenario.vehicles, states)
-                    vehicle.body.state = state
+                # TODO: Environments?
+                # TODO: Why bother storing these this way?
+                c = 0
+                for vehicle in scenario.vehicles
+                    vehicle.body.state = states[c += 1]
+                end
+                for vehicle in scenario.vehicles
+                    for component in vehicle.components
+                        component.state = states[c += 1]
+                    end
+                    for computer in vehicle.computers
+                        computer.board.state = states[c += 1]
+                    end
                 end
 
                 # Get the effects on the current state. Note that this may
@@ -426,7 +460,8 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                             component.timing.count += 1
                             component.timing.t_next = component.timing.dt * component.timing.count + component.timing.t_start
 
-                            # TODO: Log.
+                            # TODO: Log my inputs, resulting state, my outputs. Draws?
+                            # Skip the state if there's a derivative function; it will be logged below.
 
                         end
                     end
@@ -450,7 +485,8 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                             computer.board.timing.count += 1
                             computer.board.timing.t_next = computer.board.timing.dt * computer.board.timing.count + computer.board.timing.t_start
 
-                            # TODO: Log.
+                            # TODO: Log my inputs, resulting state, my outputs. Draws?
+                            # Skip the state if there's a derivative function; it will be logged below.
 
                         end
                     end
@@ -502,7 +538,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                                 # next sample.
                                 outputs[vehicle.name][computer.name][software.name] = vehicle_outputs_temp[computer.name][software.name]
 
-                                # TODO: Log.
+                                # TODO: Log my inputs, resulting state, my outputs.
 
                             end
                         end # software
@@ -519,13 +555,25 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
 
             end # k > 1
 
-            # Log everything that needs it.
+            # Log the continuous states.
             if log != nothing
-                # println("Logging at t=", t[k])
-                # TODO: Log everything that has changed on this sample.
                 for vehicle in scenario.vehicles
-                    slug = "/" * vehicle.name * "/" * vehicle.body.name * "/state/"
-                    log!(log, slug, t[k], vehicle.body.state)
+                    if vehicle.body.derivatives != nothing
+                        slug = "/" * vehicle.name * "/" * vehicle.body.name * "/state/"
+                        log!(log, slug, t[k], vehicle.body.state)
+                    end
+                    for component in vehicle.components
+                        if component.derivatives != nothing
+                            slug = "/" * vehicle.name * "/" * component.name * "/state/"
+                            log!(log, slug, t[k], component.state)
+                        end
+                    end
+                    for computer in vehicle.computers
+                        if computer.board.derivatives != nothing
+                            slug = "/" * vehicle.name * "/" * computer.name * "/" * computer.board.name * "/state/"
+                            log!(log, slug, t[k], computer.board.state)
+                        end
+                    end
                 end
             end
 
@@ -606,11 +654,12 @@ function get_effects(t, states, scenario, inputs)
     # vehicle effects. Components can consume vehicle and planet effects.
 
     effects = Dict{String, Dict{String, Tuple}}() # Instead of starting fresh, use the existing.
-    for k = 1:length(scenario.vehicles)
-        effects[scenario.vehicles[k].name] = Dict{String, Tuple}()
-        effects[scenario.vehicles[k].name][scenario.vehicles[k].body.name] =
-            scenario.vehicles[k].body.effects(
-                t, scenario.vehicles[k].body.constants, states[k], nothing)
+    c = 0 # TODO: Use something like component.id for this?
+    for c = 1:length(scenario.vehicles)
+        effects[scenario.vehicles[c].name] = Dict{String, Tuple}()
+        effects[scenario.vehicles[c].name][scenario.vehicles[c].body.name] =
+            scenario.vehicles[c].body.effects(
+                t, scenario.vehicles[c].body.constants, states[c], nothing)
     end
 
     # Next, we'll get the effect of the environment on each body. While looping
@@ -625,7 +674,7 @@ function get_effects(t, states, scenario, inputs)
         if scenario.environment.effects != nothing
             effects[vehicle.name][scenario.environment.name] = scenario.environment.effects(t,
                                      scenario.environment.constants,
-                                     scenario.environment.state,
+                                     scenario.environment.state, # TODO: Read from states once environments are allowed to have continuous-time states.
                                      draw(scenario.environment.rand, :effects), # TODO: This draw doesn't belong here. Same below.
                                      effects_bus_copy[vehicle.name],
                                      effects_bus_copy)
@@ -638,10 +687,11 @@ function get_effects(t, states, scenario, inputs)
 
         # Get all of the component and computer board effects.
         for component in vehicle.components
+            c += 1
             if component.effects != nothing
                 effects[vehicle.name][component.name] = component.effects(t,
                                            component.constants,
-                                           component.state,
+                                           states[c],
                                            draw(component.rand, :effects),
                                            inputs[vehicle.name][component.name],
                                            effects_bus_copy[vehicle.name],
@@ -649,10 +699,11 @@ function get_effects(t, states, scenario, inputs)
             end
         end
         for computer in vehicle.computers
+            c += 1
             if computer.board.effects != nothing
                 effects[vehicle.name][computer.name] = computer.board.effects(t,
                                            computer.board.constants,
-                                           computer.board.state,
+                                           states[c],
                                            draw(computer.board.rand, :effects),
                                            inputs[vehicle.name][computer.name][computer.board.name],
                                            effects_bus_copy[vehicle.name],
@@ -668,30 +719,58 @@ end
 
 function continuous(t, states, scenario, inputs, draws)
 
+    # Get all of the effects corresponding to this state.
     effects = get_effects(t, states, scenario, inputs)
 
     # Create the set of derivatives that we will write to below.
-    #
-    # If I knew what 'states' was, I could just create an empty set. Also,
-    # there's probably no advantage to creating this first. We should just
-    # create an empty vector of eltype(states) and then push! the new states
-    # into the vector.
-    derivs = deepcopy(states)
+    derivs = Vector{Any}(length(states)) # Would use eltype(states) but can't if we want to use nothing.
+    fill!(derivs, nothing)
 
-    # Get the derivatives for each body.
-    for (vehicle, k) in zip(scenario.vehicles, 1:length(states))
+    # Get the derivatives for each physical thing. We need to do this in the same
+    # order as the states and draws arrays were built. The derivative and the state
+    # should be of the same type.
+    c = 0
+    for vehicle in scenario.vehicles
+        c += 1
+        if vehicle.body.derivatives != nothing
+            derivs[c] = vehicle.body.derivatives(t,
+                                                 vehicle.body.constants,
+                                                 states[c],
+                                                 draws[c],
+                                                 effects[vehicle.name],
+                                                 effects)
+        end
+    end
 
-        # Form the rate of change of the state (same type as state itself).
-        derivs[k] = vehicle.body.derivatives(t,
-                                             vehicle.body.constants,
-                                             states[k],
-                                             draws[k],
-                                             effects[vehicle.name],
-                                             effects)
-
-        # TODO: Get derivatives for actuators.
+    for vehicle in scenario.vehicles
+        for component in vehicle.components
+            c += 1
+            if component.derivatives != nothing
+                derivs[c] = component.derivatives(t,
+                                                  component.constants,
+                                                  states[c],
+                                                  draws[c],
+                                                  inputs[vehicle.name][component.name],
+                                                  effects[vehicle.name],
+                                                  effects)
+            end
+        end
+        for computer in vehicle.computers
+            c += 1
+            if computer.board.derivatives != nothing
+                derivs[c] = computer.board.derivatives(t,
+                                                       computer.board.constants,
+                                                       states[c],
+                                                       draws[c],
+                                                       inputs[vehicle.name][computer.name][computer.board.name],
+                                                       effects[vehicle.name],
+                                                       effects)
+            end
+        end
 
     end
+
+    # TODO: Now call constraint functions.
 
     return derivs
 
