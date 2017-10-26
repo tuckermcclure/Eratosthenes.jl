@@ -293,7 +293,16 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 # Set up the streams for the components.
                 for component in vehicle.components
 
-                    # TODO: State
+                    # State
+                    if component.state != nothing
+                        slug = "/" * vehicle.name * "/" * component.name * "/state/"
+                        if component.derivatives != nothing
+                            num_samples = nt
+                        else
+                            num_samples = Int64(floor((scenario.sim.t_end - component.timing.t_start) / component.timing.dt)) + 1
+                        end
+                        add!(log, slug, t[1], component.state, num_samples)
+                    end
 
                     # TODO: Inputs
 
@@ -741,6 +750,7 @@ function continuous(t, states, scenario, inputs, draws)
                                                   component.constants,
                                                   states[c],
                                                   draws[c],
+                                                  inputs[vehicle.name][component.name],
                                                   effects[vehicle.name],
                                                   effects)
             end
@@ -752,6 +762,7 @@ function continuous(t, states, scenario, inputs, draws)
                                                        computer.board.constants,
                                                        states[c],
                                                        draws[c],
+                                                       inputs[vehicle.name][computer.name][computer.board.name],
                                                        effects[vehicle.name],
                                                        effects)
             end

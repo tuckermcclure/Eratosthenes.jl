@@ -27,9 +27,6 @@ with a little noise.
 
 """
 function StarTracker()
-    # function init(t, constants, state, draws, body_effects)
-    #     return (nothing, [0., 0., 0., 1.])
-    # end
     function sense(t, constants, state, draws, inputs, effects, effects_bus)
         errors = constants .* draws
         body, = find_effect(effects, BodyStateEffect())

@@ -1,9 +1,3 @@
-# For right now, actuators only provide force and torque, and they do so with
-# 3-by-2 array. In the future, actuators will provide actuations in various
-# "domains", such as CentralBodyForce, BodyForce (located at a point, like a
-# thruster), MagneticField (also located somewhere specific). Until then, this
-# will keep us moving forward.
-
 mutable struct IdealActuatorCommand
     force_B::Vector{Float64}
     torque_B::Vector{Float64}
@@ -37,4 +31,41 @@ function IdealActuator()
                    timing = ModelTiming(0.01),
                    inputs = IdealActuatorCommand([0.; 0.; 0.], [0.; 0.; 0.]))
 
+end
+
+"""
+   ReactionWheel
+
+This is a completely basic reaction wheel model. You request a torque, and it
+spins the wheel with the opposite torque, providing the requested torque as
+an Effect.
+"""
+function ReactionWheel()
+
+    function derivatives(t, constants, speed, draws, torque_cmd, effects, effects_bus)
+        -torque_cmd / constants.moment_of_inertia
+    end
+
+    function effects(t, constants, speed, draws, torque_cmd, effects, effects_bus)
+        (BodyTorque(constants.rotation_axis * torque_cmd),)
+    end
+
+    function sense(t, constants, speed, draws, torque_cmd, effects, effects_bus)
+        (speed, speed, true)
+    end
+
+    DynamicalModel("reaction_wheel", 
+                   constants = ReactionWheelConstants([1.; 0.; 0.], 1.),
+                   state = 100.,            # Wheel speed (rad/s)
+                   inputs = 0.,             # Requested torque (Nm)
+                   effects = effects,
+                   derivatives = derivatives,
+                   update = sense,
+                   timing = ModelTiming(0.02))
+
+end
+
+mutable struct ReactionWheelConstants
+    rotation_axis::Vector{Float64}
+    moment_of_inertia::Float64
 end
