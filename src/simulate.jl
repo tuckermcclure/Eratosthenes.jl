@@ -447,7 +447,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 # beginning of the next propagation, because the discrete
                 # updates below can change their states (and hense resulting
                 # effects) instantly.
-                E = get_effects(t, X, scenario, U)
+                E = get_effects(t, X, V, D, U, scenario)
 
                 ###################
                 # Discrete Update #
@@ -521,7 +521,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 # Update sensors, software, and actuators.
                 for vehicle in scenario.vehicles
 
-                    vehicle_outputs_km1  = deepcopy(outputs[vehicle.name])
+                    vehicle_outputs_km1  = deepcopy(Y[vehicle.name])
                     vehicle_outputs_temp = deepcopy(vehicle_outputs_km1)
 
                     # If computers were components and all components had software

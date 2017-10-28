@@ -55,7 +55,7 @@ mutable struct ModelTiming
     ModelTiming(dt = 0., t_start = 0., t_next = 0., count = 0) = new(dt, t_start, t_next, count)
 end
 
-mutable struct DynamicalModel{F0, FI, FE, FD, FU, FS, DC, DS, DI, DO}
+mutable struct DynamicalModel{F0, FI, FE, FC, FD, FU, FS, DC, DX, DU, DY, DV}
 
     name::String # Actually used as a key in a dictionary, as well as for logging
 
@@ -78,10 +78,10 @@ mutable struct DynamicalModel{F0, FI, FE, FD, FU, FS, DC, DS, DI, DO}
 
     # Data
     constants::DC # This will be set up during setup and will never change afterwards.
-    state::DS # Bonus: return a ModelState to enable "struct addition and multiplication"
-    inputs::DI # Inputs accepted by this model (e.g., commands); software can write to these.
-    outputs::DO # Outputs produced by this model (e.g., measurements); software can consume these.
-    implicit::DV
+    state::DX # Bonus: return a ModelState to enable "struct addition and multiplication"
+    inputs::DU # Inputs accepted by this model (e.g., commands); software can write to these.
+    outputs::DY # Outputs produced by this model (e.g., measurements); software can consume these.
+    implicit::DV # Implicit variables.
 
     rand::RandSpec # Provide the properties of the random number generator stream you'll need.
 
@@ -101,8 +101,9 @@ DynamicalModel(name;
                state = nothing,
                inputs = nothing,
                outputs = nothing,
+               implicit = nothing,
                rand = RandSpec()) =
-    DynamicalModel(name, startup, init, effects, constraints, derivatives, update, shutdown, timing, constants, state, inputs, outputs, rand)
+    DynamicalModel(name, startup, init, effects, constraints, derivatives, update, shutdown, timing, constants, state, inputs, outputs, implicit, rand)
 NullModel() = DynamicalModel("nothing")
 
 # Include the other code in no particular order.

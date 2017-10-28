@@ -1,7 +1,7 @@
 include("getset.jl")
 
 # Get all of the effects on all vehicles for the current state.
-function get_effects(t, X, scenario, U)
+function get_effects(t, X, V, D, U, scenario)
 
     # Get all of the effects. Start with the vehicle body. Planets can consume
     # vehicle effects. Components can consume vehicle and planet effects.
@@ -45,7 +45,7 @@ function get_effects(t, X, scenario, U)
                 E[vehicle.name][component.name] = component.effects(t,
                                            component.constants,
                                            X[c],
-                                           draw(component.rand, :effects),
+                                           D[c],
                                            U[vehicle.name][component.name],
                                            effects_bus_copy[vehicle.name],
                                            effects_bus_copy)
@@ -57,7 +57,7 @@ function get_effects(t, X, scenario, U)
                 E[vehicle.name][computer.name] = computer.board.effects(t,
                                            computer.board.constants,
                                            X[c],
-                                           draw(computer.board.rand, :effects),
+                                           D[c],
                                            U[vehicle.name][computer.name][computer.board.name],
                                            effects_bus_copy[vehicle.name],
                                            effects_bus_copy)
