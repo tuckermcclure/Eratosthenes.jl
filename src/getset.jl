@@ -1,3 +1,7 @@
+#########
+# setk! #
+#########
+
 function setk!(x, k_requested, v)
     k = setk!_inner(x, k_requested, v)
     if k > 0
@@ -50,6 +54,9 @@ end
     end
 end
 
+########
+# getk #
+########
 
 # Get index k of x, which might be a struct of struct of vectors or something.
 function getk(x, k_requested)
@@ -104,6 +111,10 @@ end
     end
 end
 
+###########
+# stackem #
+###########
+
 # Stacks reals, arrays, and anything with fieldnames into a new vector, returning the vector.
 stackem(y::T) where {T} = stackem!(Vector{Float64}(), y)
 
@@ -121,10 +132,13 @@ stackem(y::T) where {T} = stackem!(Vector{Float64}(), y)
                 for c = 1:length(y)
                     stackem!(x, y[c])
                 end
+                x
             end
         end
     elseif !isempty(fieldnames(T)) # This is nice; we can't do this with multiple dispatch. Do this for + and * and remove the ModelStates thing?
         Expr(:block, ( :( stackem!(x, y.$f) ) for f in fieldnames(T) )...)
+    elseif T <: Void # There's nothing to stack.
+        :(x) # :o
     else
         error("Sorry, I don't know how to stack a ", T, ".")
     end

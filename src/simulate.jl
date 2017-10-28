@@ -412,19 +412,19 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
 
                 V = zeros(3,1) # Guess at implicit parameters
 
-                # # If there are algebraic constraints, use the DAE form.
-                # Xd1, V = dae(t[k-1],         X,               V, U, D, scenario)
-                # Xd2, V = dae(t[k-1] + 0.5dt, X + 0.5dt * Xd1, V, U, D, scenario)
-                # Xd3, V = dae(t[k-1] + 0.5dt, X + 0.5dt * Xd2, V, U, D, scenario)
-                # Xd4, V = dae(t[k-1] +    dt, X +    dt * Xd3, V, U, D, scenario)
-                # X = X + dt/6. * Xd1 + dt/3. * Xd2 + dt/3. * Xd3 + dt/6. * Xd4
-
-                # Just RK4
-                Xd1 = continuous(t[k-1],         X,               V, D, U, scenario)
-                Xd2 = continuous(t[k-1] + 0.5dt, X + 0.5dt * Xd1, V, D, U, scenario)
-                Xd3 = continuous(t[k-1] + 0.5dt, X + 0.5dt * Xd2, V, D, U, scenario)
-                Xd4 = continuous(t[k-1] +    dt, X +    dt * Xd3, V, D, U, scenario)
+                # If there are algebraic constraints, use the DAE form.
+                Xd1, V = dae(t[k-1],         X,               V, D, U, scenario)
+                Xd2, V = dae(t[k-1] + 0.5dt, X + 0.5dt * Xd1, V, D, U, scenario)
+                Xd3, V = dae(t[k-1] + 0.5dt, X + 0.5dt * Xd2, V, D, U, scenario)
+                Xd4, V = dae(t[k-1] +    dt, X +    dt * Xd3, V, D, U, scenario)
                 X = X + dt/6. * Xd1 + dt/3. * Xd2 + dt/3. * Xd3 + dt/6. * Xd4
+
+                # # Just RK4
+                # Xd1 = ode(t[k-1],         X,               V, D, U, scenario)
+                # Xd2 = ode(t[k-1] + 0.5dt, X + 0.5dt * Xd1, V, D, U, scenario)
+                # Xd3 = ode(t[k-1] + 0.5dt, X + 0.5dt * Xd2, V, D, U, scenario)
+                # Xd4 = ode(t[k-1] +    dt, X +    dt * Xd3, V, D, U, scenario)
+                # X = X + dt/6. * Xd1 + dt/3. * Xd2 + dt/3. * Xd3 + dt/6. * Xd4
 
                 # Put back all of the states.
                 # TODO: Environments?

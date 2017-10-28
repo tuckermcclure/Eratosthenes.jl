@@ -134,13 +134,15 @@ function dae(t, X, V0, D, U, scenario)
     # 
     # Constraints and continuous equations will always be solved together. Should the contraints 
     # be the second output of the `derivatives` function?
-    Gx  = fdiffX(Xh -> constraints(t, Xh, V0, D, U, scenario), X, 1e-9)
-    V   = lm(V -> Gx * stackem(continuous(t, X, V, D, U, scenario)), V0)
-    Xd  = continuous(t, X, V, D, U, scenario) # This is already calculates above, but we'd need a custom LM to get it.
+    # Gx  = fdiffX(Xh -> constraints(t, Xh, V0, D, U, scenario), X, 1e-9)
+    # V   = lm(V -> Gx * stackem(ode(t, X, V, D, U, scenario)), V0)
+    V = V0
+    Xd  = ode(t, X, V, D, U, scenario) # This is already calculates above, but we'd need a custom LM to get it.
+    (Xd, V)
 end
 
 # Get the vector of derivatives.
-function continuous(t, X, V, D, U, scenario)
+function ode(t, X, V, D, U, scenario)
 
     # Get all of the effects corresponding to this state.
     E = get_effects(t, X, V, D, U, scenario)
