@@ -121,24 +121,47 @@ end
 
 # Get the derivatives of the entire system when there are algebraic constraints.
 function dae(t, X, V0, D, U, scenario)
-    # Let g by the constraint function.
-    # If 0 = g(t, x), then 0 = d/dt g, and by the chain rule 0 = d/dx g * dx/dt.
-    # We have a function for dx/dt given the implicit variables, y: dx/dt = f(t, x, y)
-    # We can figure out the Jacobian, Gx = d/dx g.
-    # Then, we can solve for y s.t. Gx * f(t, x, y) = 0.
-    #
-    # TODO: If the constraints are a function of the implicit variables, then this will fail,
-    # so we've removed the implicit variables from that call for now. We could instead solve 
-    # whatever constraints we can first, and then use that as a guess for the solution of the
-    # derivatives vector.
-    # 
-    # Constraints and continuous equations will always be solved together. Should the contraints 
-    # be the second output of the `derivatives` function?
-    # Gx  = fdiffX(Xh -> constraints(t, Xh, V0, D, U, scenario), X, 1e-9)
-    # V   = lm(V -> Gx * stackem(ode(t, X, V, D, U, scenario)), V0)
-    V = V0
-    Xd  = ode(t, X, V, D, U, scenario) # This is already calculates above, but we'd need a custom LM to get it.
-    (Xd, V)
+
+    # If there are algebraic constraints, solve for the implicit forces.
+    if true
+
+        # Let g be the constraint function.
+        # 
+        # If 0 = g(t, x), then 0 = d/dt g, and by the chain rule 0 = d/dx g * dx/dt.
+        # We have a function for dx/dt given the implicit variables, y: dx/dt = f(t, x, y).
+        # We can figure out the Jacobian, Gx = d/dx g, using finite differencing.
+        # Then, we can solve for y s.t. Gx * f(t, x, y) = 0.
+        #
+        # TODO: If the constraints are a function of the implicit variables, then this will fail,
+        # so we've removed the implicit variables from that call for now. We could instead solve 
+        # whatever constraints we can first, and then use that as a guess for the solution of the
+        # derivatives vector.
+        # 
+        # Constraints and continuous equations will always be solved together. Should the contraints 
+        # be the second output of the `derivatives` function?
+
+        # First, solve the constraints function for whatever part of V is observable.
+        # V = lm(V -> constraints(...), V, 1e-9)
+        V = V0
+        
+        # Now differentiate the constraints function.
+        Gx = fdiffX(Xh -> constraints(t, Xh, V, D, U, scenario), X, 1e-9)
+
+        # Now serach for implicit variables that put the state time derivative in the null 
+        # space of the constraint Jacobian.
+        # V = lm(V -> Gx * stackem(ode(t, X, V, D, U, scenario)), V0)
+
+        # Note that Xd is already calculated above, but we'd need a custom LM to get it.
+        Xd = ode(t, X, V, D, U, scenario)
+        
+    # Otherwise, just pass through whatever nothingness we're using for them.
+    else
+        V  = V0
+        Xd = ode(t, X, V, D, U, scenario)
+    end
+
+    (Xd, V0)
+
 end
 
 # Get the vector of derivatives.
