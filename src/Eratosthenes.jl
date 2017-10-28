@@ -69,6 +69,7 @@ mutable struct DynamicalModel{F0, FI, FE, FD, FU, FS, DC, DS, DI, DO}
     startup::F0 # Called to allow one to set up resources or whatever.
     init::FI # "Tell me what you produce."
     effects::FE # "Produce physical effects."
+    constraints::FC # "Tell me how well a state satisfies your constraints."
     derivatives::FD # "Tell me how the state is changing."
     update::FU # "Update yourself for this time step."
     shutdown::FS # Called when the sim ends, even when there's an error.
@@ -80,6 +81,7 @@ mutable struct DynamicalModel{F0, FI, FE, FD, FU, FS, DC, DS, DI, DO}
     state::DS # Bonus: return a ModelState to enable "struct addition and multiplication"
     inputs::DI # Inputs accepted by this model (e.g., commands); software can write to these.
     outputs::DO # Outputs produced by this model (e.g., measurements); software can consume these.
+    implicit::DV
 
     rand::RandSpec # Provide the properties of the random number generator stream you'll need.
 
@@ -90,6 +92,7 @@ DynamicalModel(name;
                startup = nothing,
                init = nothing,
                effects = nothing,
+               constraints = nothing,
                derivatives = nothing,
                update = nothing,
                shutdown = nothing,
@@ -99,19 +102,7 @@ DynamicalModel(name;
                inputs = nothing,
                outputs = nothing,
                rand = RandSpec()) =
-    DynamicalModel(name, startup, init, effects, derivatives, update, shutdown, timing, constants, state, inputs, outputs, rand)
-
-# Convenience constructors
-# Body(name, init, effects, derivatives, shutdown, timing, constants, state, rand = RandSpec()) =
-#     DynamicalModel(name, init, effects, derivatives, nothing, shutdown, timing, constants, state, nothing, nothing, rand)
-# DiscreteSensor(name, init, update, shutdown, timing, constants = nothing, state = nothing, inputs = nothing, outputs = nothing, rand = RandSpec()) =
-#     DynamicalModel(name, init, nothing, nothing, update, shutdown, timing, constants, state, inputs, outputs, rand)
-# DiscreteActuator(name, init, effects, update, shutdown, timing, constants = nothing, state = nothing, inputs = nothing, outputs = nothing, rand = RandSpec()) =
-#     DynamicalModel(name, init, effects, nothing, update, shutdown, timing, constants, state, inputs, outputs, rand)
-# Software(name, init, step, shutdown, inputs, outputs, dt, t_start, constants, state) =
-#     DynamicalModel(name, init, effects, derivatives, update, shutdown, timing, constants, state, inputs, outputs, rand)
-# ConstantModel(name, init, effects, shutdown, constants, rand = RandSpec()) =
-#     DynamicalModel(name, init, effects, derivatives, update, shutdown, timing, constants, state, inputs, outputs, rand)
+    DynamicalModel(name, startup, init, effects, constraints, derivatives, update, shutdown, timing, constants, state, inputs, outputs, rand)
 NullModel() = DynamicalModel("nothing")
 
 # Include the other code in no particular order.
@@ -145,5 +136,6 @@ mutable struct Scenario
 end
 
 include("simulate.jl")
+include("mc.jl")
 
 end

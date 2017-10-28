@@ -1,10 +1,3 @@
-# TODO:
-# * Force seeds.
-# * Add MC progress fcn.
-# * Connect to needs_init.
-# * Make log name.
-# * Show logged results.
-
 workspace()
 
 @everywhere include("EratosthenesExampleSoftware.jl")

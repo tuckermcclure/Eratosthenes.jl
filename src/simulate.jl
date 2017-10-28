@@ -1,4 +1,14 @@
 include("logging.jl")
+include("steps.jl")
+
+# Empty progress function
+simulate(scenario::Scenario) = simulate(nothing, scenario)
+
+# Simulation from file name
+simulate(file_name::String, context = current_module()) = simulate(nothing, setup(Scenario(), file_name, context))
+
+# Simulation from file name with progress function
+simulate(progress_fcn::Function, file_name::String, context = current_module()) = simulate(progress_fcn, setup(Scenario(), file_name, context))
 
 """
     simulate
@@ -17,9 +27,9 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
         log = nothing
     end
 
-    effects = Dict{String,Dict{String,Tuple}}() # "These are the effects that I generate."
-    inputs  = Dict{String,Dict{String,Any}}()   # "Anyone can write to these inputs. I will consume them."
-    outputs = Dict{String,Dict{String,Any}}()   # "I will write to these outputs. Anyone can consume them."
+    E = Dict{String,Dict{String,Tuple}}() # "These are the effects that I generate."
+    U = Dict{String,Dict{String,Any}}()   # "Anyone can write to these inputs. I will consume them."
+    Y = Dict{String,Dict{String,Any}}()   # "I will write to these outputs. Anyone can consume them."
 
     # Seed the global random number generator, which we'll only use to draw any
     # necessary seeds for other RNGs. When this is used as part of a Monte-Carlo
@@ -94,22 +104,22 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
 
         # Set up input and output buses.
         for vehicle in scenario.vehicles
-            inputs[vehicle.name]  = Dict{String,Any}()
-            outputs[vehicle.name] = Dict{String,Any}()
-            inputs[vehicle.name][vehicle.body.name]  = vehicle.body.inputs
-            outputs[vehicle.name][vehicle.body.name] = vehicle.body.outputs
+            U[vehicle.name]  = Dict{String,Any}()
+            Y[vehicle.name] = Dict{String,Any}()
+            U[vehicle.name][vehicle.body.name]  = vehicle.body.inputs
+            Y[vehicle.name][vehicle.body.name] = vehicle.body.outputs
             for component in vehicle.components
-                inputs[vehicle.name][component.name]  = component.inputs
-                outputs[vehicle.name][component.name] = component.outputs
+                U[vehicle.name][component.name]  = component.inputs
+                Y[vehicle.name][component.name] = component.outputs
             end
             for computer in vehicle.computers
-                inputs[vehicle.name][computer.name]  = Dict{String,Any}()
-                outputs[vehicle.name][computer.name] = Dict{String,Any}()
-                inputs[vehicle.name][computer.name][computer.board.name]  = computer.board.inputs
-                outputs[vehicle.name][computer.name][computer.board.name] = computer.board.outputs
+                U[vehicle.name][computer.name]  = Dict{String,Any}()
+                Y[vehicle.name][computer.name] = Dict{String,Any}()
+                U[vehicle.name][computer.name][computer.board.name]  = computer.board.inputs
+                Y[vehicle.name][computer.name][computer.board.name] = computer.board.outputs
                 for software in computer.software
-                    inputs[vehicle.name][computer.name][software.name]  = software.inputs
-                    outputs[vehicle.name][computer.name][software.name] = software.outputs
+                    U[vehicle.name][computer.name][software.name]  = software.inputs
+                    Y[vehicle.name][computer.name][software.name] = software.outputs
                 end
             end
         end
@@ -130,7 +140,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
             # Initialize the vehicles.
             for vehicle in scenario.vehicles
 
-                effects[vehicle.name] = Dict{String,Tuple}()
+                E[vehicle.name] = Dict{String,Tuple}()
 
                 # Initialize each vehicle body before doing components.
                 if vehicle.body.init != nothing
@@ -143,26 +153,26 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
 
                 # Get the body's effects.
                 if vehicle.body.effects != nothing
-                    effects[vehicle.name][vehicle.body.name] =
+                    E[vehicle.name][vehicle.body.name] =
                         vehicle.body.effects(t[1],
                                              vehicle.body.constants,
                                              vehicle.body.state,
                                              draw(vehicle.body.rand, :effects))
                 else
-                    #effects[vehicle.name][vehicle.body.name] = () # TODO: Do I need this?
+                    #E[vehicle.name][vehicle.body.name] = () # TODO: Do I need this?
                 end
 
                 # Get the effects of the environment on the body.
                 if scenario.environment.effects != nothing
-                    effects[vehicle.name][scenario.environment.name] =
+                    E[vehicle.name][scenario.environment.name] =
                         scenario.environment.effects(t[1],
                                                      scenario.environment.constants,
                                                      scenario.environment.state,
                                                      draw(scenario.environment.rand, :effects),
-                                                     effects[vehicle.name],
-                                                     effects)
+                                                     E[vehicle.name],
+                                                     E)
                 else
-                    #effects[vehicle.name][scenario.environment.name] = ()
+                    #E[vehicle.name][scenario.environment.name] = ()
                 end
 
                 # TODO: Both Bodies and Environments could produce outputs.
@@ -175,25 +185,25 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 for component in vehicle.components
 
                     if component.init != nothing
-                        component.state, outputs[vehicle.name][component.name] = component.init(
+                        component.state, Y[vehicle.name][component.name] = component.init(
                             t[1],
                             component.constants,
                             component.state,
                             draw(component.rand, :init),
-                            inputs[vehicle.name][component.name],
-                            effects[vehicle.name],
-                            effects)
+                            U[vehicle.name][component.name],
+                            E[vehicle.name],
+                            E)
                     end
 
                     if component.effects != nothing
-                        effects[vehicle.name][component.name] = component.effects(
+                        E[vehicle.name][component.name] = component.effects(
                             t[1],
                             component.constants,
                             component.state,
                             draw(component.rand, :effects),
-                            inputs[vehicle.name][component.name],
-                            effects[vehicle.name],
-                            effects) # TODO: Limit this to the body and environment effects.
+                            U[vehicle.name][component.name],
+                            E[vehicle.name],
+                            E) # TODO: Limit this to the body and environment effects.
                     end
 
                     # This counts as a "tick" of the system if this would have
@@ -209,27 +219,27 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
 
                     if computer.board.init != nothing
                         computer.board.state,
-                        outputs[vehicle.name][computer.name][computer.board.name] =
+                        Y[vehicle.name][computer.name][computer.board.name] =
                             computer.board.init(
                                 t[1],
                                 computer.board.constants,
                                 computer.board.state,
                                 draw(computer.board.rand, :init),
-                                inputs[vehicle.name][computer.name][computer.board.name],
-                                effects[vehicle.name],
-                                effects)
+                                U[vehicle.name][computer.name][computer.board.name],
+                                E[vehicle.name],
+                                E)
                     end
 
                     if computer.board.effects != nothing
-                        effects[vehicle.name][computer.name][computer.board.name] =
+                        E[vehicle.name][computer.name][computer.board.name] =
                             computer.board.effects(
                                 t[1],
                                 computer.board.constants,
                                 computer.board.state,
                                 draw(computer.board.rand, :effects),
-                                inputs[vehicle.name][computer.name][computer.board.name],
-                                effects[vehicle.name],
-                                effects) # TODO: Limit this to the body and environment effects.
+                                U[vehicle.name][computer.name][computer.board.name],
+                                E[vehicle.name],
+                                E) # TODO: Limit this to the body and environment effects.
                     end
 
                     # This counts as a "tick" of the system if this would have
@@ -243,14 +253,14 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
 
                         if software.init != nothing
                             software.state,
-                            outputs[vehicle.name][computer.name][software.name] =
+                            Y[vehicle.name][computer.name][software.name] =
                                 software.init(
                                     t[1],
                                     software.constants,
                                     software.state,
-                                    inputs[vehicle.name][computer.name][software.name],
-                                    outputs[vehicle.name],
-                                    inputs[vehicle.name])
+                                    U[vehicle.name][computer.name][software.name],
+                                    Y[vehicle.name],
+                                    U[vehicle.name])
                         end
 
                         # This counts as a "tick" of the system if this would have
@@ -310,7 +320,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                     if component.outputs != nothing
                         slug = "/" * vehicle.name * "/" * component.name * "/outputs/"
                         num_samples = Int64(floor((scenario.sim.t_end - component.timing.t_start) / component.timing.dt)) + 1
-                        add!(log, slug, t[1], outputs[vehicle.name][component.name], num_samples)
+                        add!(log, slug, t[1], Y[vehicle.name][component.name], num_samples)
                     end
 
                 end
@@ -325,7 +335,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                     if computer.board.outputs != nothing
                         slug = "/" * vehicle.name * "/" * computer.name * "/" * computer.board.name * "/outputs/"
                         num_samples = Int64(floor((scenario.sim.t_end - component.board.timing.t_start) / component.board.timing.dt)) + 1
-                        add!(log, slug, t[1], outputs[vehicle.name][computer.name][computer.board.name], num_samples)
+                        add!(log, slug, t[1], Y[vehicle.name][computer.name][computer.board.name], num_samples)
                     end
 
                     for software in computer.software
@@ -338,7 +348,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                         if software.outputs != nothing
                             slug = "/" * vehicle.name * "/" * computer.name * "/" * software.name * "/outputs/"
                             num_samples = Int64(floor((scenario.sim.t_end - software.timing.t_start) / software.timing.dt)) + 1
-                            add!(log, slug, t[1], outputs[vehicle.name][computer.name][software.name], num_samples)
+                            add!(log, slug, t[1], Y[vehicle.name][computer.name][software.name], num_samples)
                         end
 
                     end
@@ -378,46 +388,57 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 #####################
 
                 # Put all of the continuous-time states in a vector.
-                states = []
-                draws  = []
+                X = []
+                D = []
                 # TODO: Add environments; they should be able to have continuous states.
                 for vehicle in scenario.vehicles
-                    push!(states, vehicle.body.state)
-                    push!(draws,  draw(vehicle.body.rand, :derivatives))
+                    push!(X, vehicle.body.state)
+                    push!(D,  draw(vehicle.body.rand, :derivatives))
                 end
                 for vehicle in scenario.vehicles
                     for component in vehicle.components
-                        push!(states, component.state)
-                        push!(draws, draw(component.rand, :derivatives))
+                        push!(X, component.state)
+                        push!(D, draw(component.rand, :derivatives))
                     end
                     for computer in vehicle.computers
-                        push!(states, computer.board.state)
-                        push!(draws, draw(computer.board.rand, :derivatives))
+                        push!(X, computer.board.state)
+                        push!(D, draw(computer.board.rand, :derivatives))
                     end
                 end
-                # states = [vehicle.body.state for vehicle in scenario.vehicles]
-                # draws  = [draw(vehicle.body.rand, :derivatives) for vehicle in scenario.vehicles]
+                # X = [vehicle.body.state for vehicle in scenario.vehicles]
+                # D = [draw(vehicle.body.rand, :derivatives) for vehicle in scenario.vehicles]
 
                 # Run Runge-Kutta 4 until we get an integrator passed into here.
-                Xd1 = continuous(t[k-1],         states,               scenario, inputs, draws)
-                Xd2 = continuous(t[k-1] + 0.5dt, states + 0.5dt * Xd1, scenario, inputs, draws)
-                Xd3 = continuous(t[k-1] + 0.5dt, states + 0.5dt * Xd2, scenario, inputs, draws)
-                Xd4 = continuous(t[k-1] +    dt, states +    dt * Xd3, scenario, inputs, draws)
-                states = states + dt/6. * Xd1 + dt/3. * Xd2 + dt/3. * Xd3 + dt/6. * Xd4
+
+                V = zeros(3,1) # Guess at implicit parameters
+
+                # # If there are algebraic constraints, use the DAE form.
+                # Xd1, V = dae(t[k-1],         X,               V, U, D, scenario)
+                # Xd2, V = dae(t[k-1] + 0.5dt, X + 0.5dt * Xd1, V, U, D, scenario)
+                # Xd3, V = dae(t[k-1] + 0.5dt, X + 0.5dt * Xd2, V, U, D, scenario)
+                # Xd4, V = dae(t[k-1] +    dt, X +    dt * Xd3, V, U, D, scenario)
+                # X = X + dt/6. * Xd1 + dt/3. * Xd2 + dt/3. * Xd3 + dt/6. * Xd4
+
+                # Just RK4
+                Xd1 = continuous(t[k-1],         X,               V, D, U, scenario)
+                Xd2 = continuous(t[k-1] + 0.5dt, X + 0.5dt * Xd1, V, D, U, scenario)
+                Xd3 = continuous(t[k-1] + 0.5dt, X + 0.5dt * Xd2, V, D, U, scenario)
+                Xd4 = continuous(t[k-1] +    dt, X +    dt * Xd3, V, D, U, scenario)
+                X = X + dt/6. * Xd1 + dt/3. * Xd2 + dt/3. * Xd3 + dt/6. * Xd4
 
                 # Put back all of the states.
                 # TODO: Environments?
                 # TODO: Why bother storing these this way?
                 c = 0
                 for vehicle in scenario.vehicles
-                    vehicle.body.state = states[c += 1]
+                    vehicle.body.state = X[c += 1]
                 end
                 for vehicle in scenario.vehicles
                     for component in vehicle.components
-                        component.state = states[c += 1]
+                        component.state = X[c += 1]
                     end
                     for computer in vehicle.computers
-                        computer.board.state = states[c += 1]
+                        computer.board.state = X[c += 1]
                     end
                 end
 
@@ -426,7 +447,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 # beginning of the next propagation, because the discrete
                 # updates below can change their states (and hense resulting
                 # effects) instantly.
-                effects = get_effects(t, states, scenario, inputs)
+                E = get_effects(t, X, scenario, U)
 
                 ###################
                 # Discrete Update #
@@ -439,7 +460,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
 
                     # Create an iterator over all of the effects for this vehicle for
                     # convenience and speed.
-                    vehicle_effects = copy(effects[vehicle.name])
+                    vehicle_effects = copy(E[vehicle.name])
 
                     # Update any sensor whose t_next has come.
                     for component in vehicle.components
@@ -447,14 +468,14 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
 
                             # Update the state and get the measurement.
                             component.state,
-                            outputs[vehicle.name][component.name] = component.update(
+                            Y[vehicle.name][component.name] = component.update(
                                 t[k],
                                 component.constants,
                                 component.state,
                                 draw(component.rand, :update),
-                                inputs[vehicle.name][component.name],
+                                U[vehicle.name][component.name],
                                 vehicle_effects,
-                                effects)
+                                E)
 
                             # Update the next hit time.
                             component.timing.count += 1
@@ -472,14 +493,14 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
 
                             # Update the state and get the measurement.
                             computer.board.state,
-                            outputs[vehicle.name][computer.name][computer.board.name] = computer.board.update(
+                            Y[vehicle.name][computer.name][computer.board.name] = computer.board.update(
                                 t[k],
                                 computer.board.constants,
                                 computer.board.state,
                                 draw(computer.board.rand, :update),
-                                inputs[vehicle.name][computer.name][computer.board.name],
+                                U[vehicle.name][computer.name][computer.board.name],
                                 vehicle_effects,
-                                effects)
+                                E)
 
                             # Update the next hit time.
                             computer.board.timing.count += 1
@@ -521,13 +542,13 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                                 # Update the inputs bus and outputs for this software.
                                 software.state,
                                 vehicle_outputs_temp[computer.name][software.name], # This software's outputs
-                                inputs[vehicle.name] = # Commands or software inputs for any other computer on this vehicle
+                                U[vehicle.name] = # Commands or software inputs for any other computer on this vehicle
                                     software.update(t[k],
                                                 software.constants,
                                                 software.state,
-                                                inputs[vehicle.name][computer.name][software.name], # Commands or software inputs from this vehicle
+                                                U[vehicle.name][computer.name][software.name], # Commands or software inputs from this vehicle
                                                 vehicle_outputs_temp, # Includes measurements and other software outputs
-                                                inputs[vehicle.name]) # To write to the inputs of other components
+                                                U[vehicle.name]) # To write to the inputs of other components
 
                                 # Update the next sample time.
                                 software.timing.count  += 1
@@ -536,7 +557,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                                 # Copy the updated outputs to the complete set of
                                 # updated outputs that won't be used again until the
                                 # next sample.
-                                outputs[vehicle.name][computer.name][software.name] = vehicle_outputs_temp[computer.name][software.name]
+                                Y[vehicle.name][computer.name][software.name] = vehicle_outputs_temp[computer.name][software.name]
 
                                 # TODO: Log my inputs, resulting state, my outputs.
 
@@ -638,144 +659,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
     return scenario
 end
 
-# Empty progress function
-simulate(scenario::Scenario) = simulate(nothing, scenario)
-
-# Simulation from file name
-simulate(file_name::String, context = current_module()) = simulate(nothing, setup(Scenario(), file_name, context))
-
-# Simulation from file name with progress function
-simulate(progress_fcn::Function, file_name::String, context = current_module()) = simulate(progress_fcn, setup(Scenario(), file_name, context))
-
-# Get all of the effects on all vehicles for the current state.
-function get_effects(t, states, scenario, inputs)
-
-    # Get all of the effects. Start with the vehicle body. Planets can consume
-    # vehicle effects. Components can consume vehicle and planet effects.
-
-    effects = Dict{String, Dict{String, Tuple}}() # Instead of starting fresh, use the existing.
-    c = 0 # TODO: Use something like component.id for this?
-    for c = 1:length(scenario.vehicles)
-        effects[scenario.vehicles[c].name] = Dict{String, Tuple}()
-        effects[scenario.vehicles[c].name][scenario.vehicles[c].body.name] =
-            scenario.vehicles[c].body.effects(
-                t, scenario.vehicles[c].body.constants, states[c], nothing)
-    end
-
-    # Next, we'll get the effect of the environment on each body. While looping
-    # over the bodies, we don't want the effects from the first body to be
-    # visible to the second, so we'll need to make a copy here. We only need a
-    # copy and not a deep copy, because the old effects won't be changed; we
-    # simply need a dictionary that doesn't know about the new ones.
-    effects_bus_copy = copy(effects)
-
-    # Get the planet's effects, given the body's effects.
-    for vehicle in scenario.vehicles
-        if scenario.environment.effects != nothing
-            effects[vehicle.name][scenario.environment.name] = scenario.environment.effects(t,
-                                     scenario.environment.constants,
-                                     scenario.environment.state, # TODO: Read from states once environments are allowed to have continuous-time states.
-                                     draw(scenario.environment.rand, :effects), # TODO: This draw doesn't belong here. Same below.
-                                     effects_bus_copy[vehicle.name],
-                                     effects_bus_copy)
-        end
-    end
-
-    # Get the actuators' effects, given the bodies' effects and planet's effects.
-    effects_bus_copy = copy(effects)
-    for vehicle in scenario.vehicles
-
-        # Get all of the component and computer board effects.
-        for component in vehicle.components
-            c += 1
-            if component.effects != nothing
-                effects[vehicle.name][component.name] = component.effects(t,
-                                           component.constants,
-                                           states[c],
-                                           draw(component.rand, :effects),
-                                           inputs[vehicle.name][component.name],
-                                           effects_bus_copy[vehicle.name],
-                                           effects_bus_copy)
-            end
-        end
-        for computer in vehicle.computers
-            c += 1
-            if computer.board.effects != nothing
-                effects[vehicle.name][computer.name] = computer.board.effects(t,
-                                           computer.board.constants,
-                                           states[c],
-                                           draw(computer.board.rand, :effects),
-                                           inputs[vehicle.name][computer.name][computer.board.name],
-                                           effects_bus_copy[vehicle.name],
-                                           effects_bus_copy)
-            end
-        end
-
-    end
-
-    return effects
-
-end
-
-function continuous(t, states, scenario, inputs, draws)
-
-    # Get all of the effects corresponding to this state.
-    effects = get_effects(t, states, scenario, inputs)
-
-    # Create the set of derivatives that we will write to below.
-    derivs = Vector{Any}(length(states)) # Would use eltype(states) but can't if we want to use nothing.
-    fill!(derivs, nothing)
-
-    # Get the derivatives for each physical thing. We need to do this in the same
-    # order as the states and draws arrays were built. The derivative and the state
-    # should be of the same type.
-    c = 0
-    for vehicle in scenario.vehicles
-        c += 1
-        if vehicle.body.derivatives != nothing
-            derivs[c] = vehicle.body.derivatives(t,
-                                                 vehicle.body.constants,
-                                                 states[c],
-                                                 draws[c],
-                                                 effects[vehicle.name],
-                                                 effects)
-        end
-    end
-
-    for vehicle in scenario.vehicles
-        for component in vehicle.components
-            c += 1
-            if component.derivatives != nothing
-                derivs[c] = component.derivatives(t,
-                                                  component.constants,
-                                                  states[c],
-                                                  draws[c],
-                                                  inputs[vehicle.name][component.name],
-                                                  effects[vehicle.name],
-                                                  effects)
-            end
-        end
-        for computer in vehicle.computers
-            c += 1
-            if computer.board.derivatives != nothing
-                derivs[c] = computer.board.derivatives(t,
-                                                       computer.board.constants,
-                                                       states[c],
-                                                       draws[c],
-                                                       inputs[vehicle.name][computer.name][computer.board.name],
-                                                       effects[vehicle.name],
-                                                       effects)
-            end
-        end
-
-    end
-
-    # TODO: Now call constraint functions.
-
-    return derivs
-
-end
-
+# Figure out every time step that we're going to need.
 function calculate_time_steps(scenario)
 
     tf = scenario.sim.t_end
@@ -875,36 +759,3 @@ function calculate_time_steps(scenario)
     return (ts, ϵ, counts)
 
 end
-
-function mc(scenario::Scenario, n::Int)
-
-    function mchelper(scenario::Scenario, k::Int)
-        println("Running MC variation ", k, " on worker ", myid())
-        scenario.sim.seed = k
-        scenario.sim.log_file = "out/mc" * string(k) * ".h5"
-        simulate(scenario)
-    end
-
-    pmap(k -> mchelper(scenario, k), 1:n)
-
-end
-
-# function foo(m1, m2, k)
-#
-#     srand(k)
-#
-#     Eratosthenes.seed(m1, true)
-#     Eratosthenes.seed(m2, true)
-#
-#     d1 = hcat(Eratosthenes.draw(m1, :update), Eratosthenes.draw(m1, :update))
-#     d2 = hcat(Eratosthenes.draw(m2, :update), Eratosthenes.draw(m2, :update))
-#
-#     x = [d1[end]; d2[end]; myid()]
-#
-#     return x
-#
-# end
-#
-# function mct(m1, m2, n::Int)
-#     pmap(k -> foo(m1, m2, k), 1:n)
-# end
