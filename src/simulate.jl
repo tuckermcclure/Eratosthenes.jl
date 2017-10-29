@@ -407,13 +407,13 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 end
 
                 # TODO: Get initial values for this somehow.
-                V = zeros(3,1) # Guess at implicit parameters
+                V = [] # Guess at implicit parameters
 
                 # Use RK4 with a constraint solver for semi-explicity, index 1 DAE support.
-                Xd1, V = dae(t[k-1],         X,               V, D, U, scenario)
-                Xd2, V = dae(t[k-1] + 0.5dt, X + 0.5dt * Xd1, V, D, U, scenario)
-                Xd3, V = dae(t[k-1] + 0.5dt, X + 0.5dt * Xd2, V, D, U, scenario)
-                Xd4, V = dae(t[k-1] +    dt, X +    dt * Xd3, V, D, U, scenario)
+                Xd1, V = minor(t[k-1],         X,               V, D, U, scenario)
+                Xd2, V = minor(t[k-1] + 0.5dt, X + 0.5dt * Xd1, V, D, U, scenario)
+                Xd3, V = minor(t[k-1] + 0.5dt, X + 0.5dt * Xd2, V, D, U, scenario)
+                Xd4, V = minor(t[k-1] +    dt, X +    dt * Xd3, V, D, U, scenario)
                 X = X + dt/6. * Xd1 + dt/3. * Xd2 + dt/3. * Xd3 + dt/6. * Xd4
 
                 # Put back all of the states.

@@ -71,59 +71,61 @@ function get_effects(t, X, V, D, U, scenario)
 end
 
 # Finite differences (central), where the state vector isn't actually a vector.
-function fdiffX(f, X, α=1e-6) # Use a ! in the name? It modifies x, but should return it to its original.
-    fx = stackem(f(X)) # If n were passed in, this could just be full of 0.
+# This function takes advantage of the fact that the constraints and ode functions
+# have the same interface.
+function fdiffX(f::T, t, X, V, D, U, scenario, α=1e-6) where {T <: Function} # Use a ! in the name? It modifies x, but should return it to its original.
+    fx = stackem(f(t, X, V, D, U, scenario)) # If n were passed in, this could just be full of 0.
     n  = length(fx) # This should be constant and could be passed in.
     J  = zeros(n, n)
     for k = 1:n
         xo = getk(X, k) # Store the original value
         setk!(X, k, xo + α) # Perturb in the positive direction.
-        stackem!(fx, f(X), 0) # Replace with a version that stacks directly into J[:,k].
+        stackem!(fx, f(t, X, V, D, U, scenario), 0) # Replace with a version that stacks directly into J[:,k].
         J[:,k] = fx[:] # Copy from the vector to the right place in the Jacobian. Do this with views instead?
         setk!(X, k, xo - α) # And now the negative.
-        stackem!(fx, f(X), 0)
+        stackem!(fx, f(t, X, V, D, U, scenario), 0)
         J[:,k] = (J[:,k] - fx) / (2α)
         setk!(X, k, xo) # Return x to what it was.
     end
     return J
 end
 
-# Finite differences (central)
-function fdiff(f, x, α=1e-6)
-    J  = zeros(length(x), length(x))
-    for k = 1:length(x)
-        xo     = x[k] # Store the original value
-        x[k]   = xo + α # Perturb in the positive direction.
-        J[:,k] = f(x)
-        x[k]   = xo - α # And now the negative.
-        J[:,k] = (J[:,k] - f(x)) / (2α)
-        x[k]   = xo # Return x to what it was.
-    end
-    return J
-end
+# # Finite differences (central)
+# function fdiff(f, x, α=1e-6)
+#     J  = zeros(length(x), length(x))
+#     for k = 1:length(x)
+#         xo     = x[k] # Store the original value
+#         x[k]   = xo + α # Perturb in the positive direction.
+#         J[:,k] = f(x)
+#         x[k]   = xo - α # And now the negative.
+#         J[:,k] = (J[:,k] - f(x)) / (2α)
+#         x[k]   = xo # Return x to what it was.
+#     end
+#     return J
+# end
 
-# Levenberg-Marquardt root solving
-function lm(G, f, β, λ=1e-6, tol=1e-6, k_max=1000)
-    k = 0
-    for k = 0:k_max-1
-        fk = f(β)
-        if all(abs.(fk) .< tol)
-            break
-        end
-        J   =  fdiff(f, β)
-        JtJ =  J.' * J
-        A   =  JtJ + λ * diagm(diag(JtJ))
-        σ   =  -(pinv(A) * (J.' * G * fk)) # Use pinv in case of mischief.
-        β   += σ
-    end
-    (β, fk, k)
-end
+# # Levenberg-Marquardt root solving
+# function lm(G, f, β, λ=1e-6, tol=1e-6, k_max=1000)
+#     k = 0
+#     for k = 0:k_max-1
+#         fk = f(β)
+#         if all(abs.(fk) .< tol)
+#             break
+#         end
+#         J   =  fdiff(f, β)
+#         JtJ =  J.' * J
+#         A   =  JtJ + λ * diagm(diag(JtJ))
+#         σ   =  -(pinv(A) * (J.' * G * fk)) # Use pinv in case of mischief.
+#         β   += σ
+#     end
+#     (β, fk, k)
+# end
 
 # Get the derivatives of the entire system when there are algebraic constraints.
-function dae(t, X, V0, D, U, scenario)
+function minor(t, X, V, D, U, scenario)
 
     # If there are algebraic constraints, solve for the implicit forces.
-    if true
+    if !isempty(V)
 
         # Let g be the constraint function.
         # 
@@ -142,10 +144,12 @@ function dae(t, X, V0, D, U, scenario)
 
         # First, solve the constraints function for whatever part of V is observable.
         # V = lm(V -> constraints(...), V, 1e-9)
-        V = V0
         
         # Now differentiate the constraints function.
-        Gx = fdiffX(Xh -> constraints(t, Xh, V, D, U, scenario), X, 1e-9)
+        # Gx = fdiffX(Xh -> constraints(t, Xh, V, D, U, scenario), X, 1e-9)
+        # Gx = fdiffX(constraints, t, X, V, D, U, scenario, 1e-9)
+        z = constraints(t, X, V, D, U, scenario)
+        display(z)
 
         # Now serach for implicit variables that put the state time derivative in the null 
         # space of the constraint Jacobian.
@@ -156,12 +160,16 @@ function dae(t, X, V0, D, U, scenario)
         
     # Otherwise, just pass through whatever nothingness we're using for them.
     else
-        V  = V0
         Xd = ode(t, X, V, D, U, scenario)
     end
 
-    (Xd, V0)
+    (Xd, V)
 
+end
+
+# Get the vector of constraints.
+function dae(t, X, V, D, U, scenario)
+    
 end
 
 # Get the vector of derivatives.

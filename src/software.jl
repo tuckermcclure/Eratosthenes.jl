@@ -54,19 +54,34 @@ the spacecraft with the ICRF.
 function ReactionWheelController()
 
     function step(t, q_TI, state, inputs, outputs_bus,
-                inputs_bus) # for output only
+                  inputs_bus) # for output only
 
         # Extract what we care about.
         q_BI   = outputs_bus["star_tracker"]
         ω_BI_B = outputs_bus["gyro"]
-
-        # Run the actual algorithm that will fly.
+        ω_rw   = [outputs_bus["rw1"]; outputs_bus["rw2"]; outputs_bus["rw3"]]
+        
+        # Get the desired net torque on the body.
         (f_B, τ_B) = pd_controller(q_TI, q_BI, ω_BI_B)
 
+        # Feed the dynamics forward to get the resulting torque necessary from the RW motors.
+        I_b = 5.
+        I_r = 0.25
+        τ_br_B_cmd = (  τ_B 
+                      # + ω_BI_B × (I_b * ω_BI_B) # Zero (MOI are all the same)
+                      + ω_BI_B × (I_r * ω_rw))
+
+        # H_B = (  I_b * ω_BI_B 
+        #        + 0.25*[1.; 1/sqrt(2.); 1/sqrt(2.)] .* ([ω_rw[1]; 0.; 0.] + ω_BI_B)
+        #        + 0.25*[1/sqrt(2.); 1.; 1/sqrt(2.)] .* ([0.; ω_rw[2]; 0.] + ω_BI_B)
+        #        + 0.25*[1/sqrt(2.); 1/sqrt(2.); 1.] .* ([0.; 0.; ω_rw[3]] + ω_BI_B))
+        # H_I = qrot(qinv(q_BI), H_B)
+        # println("Angular momentum in inertial frame: ", H_I)
+                      
         # Write out our command for the ideal actuator.
-        inputs_bus["rw1"] = τ_B[1]
-        inputs_bus["rw2"] = τ_B[2]
-        inputs_bus["rw3"] = τ_B[3]
+        inputs_bus["rw1"] = τ_br_B_cmd[1]
+        inputs_bus["rw2"] = τ_br_B_cmd[2]
+        inputs_bus["rw3"] = τ_br_B_cmd[3]
 
         return (state,      # Updated state (none)
                 nothing,    # Outputs

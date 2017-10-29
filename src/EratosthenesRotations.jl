@@ -58,7 +58,13 @@ function q2aa(q::Vector{T}) where {T<:Real}
     half_theta = acos(max(min(q[4], 1.), -1.))
     if half_theta != 0.
         theta = 2. * half_theta
-        r = normalize(q[1:3] / sin(half_theta))
+        r = q[1:3] / sin(half_theta)
+        r_mag = sqrt(sum(r.^2))
+        if r_mag == 0.
+            r = [1.; 0.; 0.]
+        else
+            r = r ./ r_mag
+        end
     else
         theta = 0.
         r = [1., 0., 0.]

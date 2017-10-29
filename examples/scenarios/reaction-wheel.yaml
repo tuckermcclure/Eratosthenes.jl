@@ -23,28 +23,35 @@ vehicles:
     components: # Low-level stuff, like sensors and actuators; these run "before" software on common timesteps.
       - model: Gyro # Generic gyro; uses finite difference of q_BI as average rate
         name: gyro
-        timing: { dt: 0.05 }
+        constants: 
+          angular_random_walk: 0.000001
+          initial_bias_magnitude: 0.00001
+          bias_random_walk: 0.000001
+        timing: { dt: 0.02 }
       - model: StarTracker # Generic star tracker; measures q_BI
         name: star_tracker
         timing: { dt: 0.1 }
       - model: ReactionWheel
         name: rw1
         constants:
-          rotation_axis: [1., 0., 0.]
-        timing: { dt: 0.05 }
+          q_GB: "[0.; 0.; 0.; 1.]" # Quaternion of rotor frame wrt body, rotates about body X
+          I_r_G: "0.25 * [1.; 1/sqrt(2.); 1/sqrt(2.)]" # Moment of inertia in rotor frame
+        timing: { dt: 0.02 }
       - model: ReactionWheel
         name: rw2
         constants:
-          rotation_axis: [0., 1., 0.]
-        timing: { dt: 0.05 }
+          q_GB: "[0.; 0.; 1/sqrt(2.); 1/sqrt(2.)]" # Rotates about body Y
+          I_r_G: "0.25 * [1.; 1/sqrt(2.); 1/sqrt(2.)]" # Moment of inertia in rotor frame
+        timing: { dt: 0.02 }
       - model: ReactionWheel
         name: rw3
         constants:
-          rotation_axis: [0., 0., 1.]
-        timing: { dt: 0.05 }
+          q_GB: "[0.; -1/sqrt(2.); 0.; 1/sqrt(2.)]" # Rotates about body Z
+          I_r_G: "0.25 * [1.; 1/sqrt(2.); 1/sqrt(2.)]" # Moment of inertia in rotor frame
+        timing: { dt: 0.02 }
     computers: # These are more sophisticated and can run multiple processes at various rates.
       - model: Computer # Generic flight computer; just runs its processes
         software:
           - model: ReactionWheelController
             constants: [0., 1., 0., 0.] # Target orientation
-            timing: { dt: 0.05 }
+            timing: { dt: 0.02 }
