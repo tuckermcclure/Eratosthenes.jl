@@ -33,13 +33,13 @@ scenario = setup("scenarios/reaction-wheel.yaml")
 # end
 # Profile.clear()
 
-# Run it with text progress (e.g., from VS Code).
-simulate(scenario) do k, n
-    if (k-1) % 100 == 0
-        @printf("Progress: % 5.1f%% done.\n", round(100*(k-1)/(n-1), 1))
-    end
-    return true
-end
+# # Run it with text progress (e.g., from VS Code).
+# simulate(scenario) do k, n
+#     if (k-1) % 100 == 0
+#         @printf("Progress: % 5.1f%% done.\n", round(100*(k-1)/(n-1), 1))
+#     end
+#     return true
+# end
 
 # Create a Juno waitbar. This do-block syntax makes sure it gets "closed" even
 # if there's an error.
@@ -99,19 +99,25 @@ if !isempty(scenario.sim.log_file)
                  label  = ["ω1" "ω2" "ω3"],
                  xlabel = "Time (s)",
                  ylabel = "Rotation Rate (deg/s)"))
-    # display(plot(t, 30/π*[rw1[1,:]; rw2; rw3].',
-    #              label  = ["rw1" "rw2" "rw3"],
-    #              xlabel = "Time (s)",
-    #              ylabel = "Wheel Rate (RPM)"))
+
+    display(plot(randn(5,5))) # Dummy. This doesn't show up, but the next will?
+
+    display(plot(t, 30/π*[rw1[1,:] rw2[1,:] rw3[1,:]],
+                 label  = ["rw1" "rw2" "rw3"],
+                 xlabel = "Time (s)",
+                 ylabel = "Wheel Rate (RPM)"))
 
     # # For coupled reaction wheels:
-    # display(plot(t, 30/π*rw1.',
+    # display(plot(t, 30/π*(rw1 - ω_BI_B).',
     #              xlabel = "Time (s)",
     #              ylabel = "RW1 Rate (RPM)"))
-    # display(plot(t, 30/π*rw2.',
+    # display(plot(t, 30/π*(rw1 - ω_BI_B).',
+    #              xlabel = "Time (s)",
+    #              ylabel = "RW1 Rate (RPM)")) # I need two of this plot to get it plotted once??
+    # display(plot(t, 30/π*([0. -1. 0.; 1. 0. 0.; 0. 0. 1.] * rw2 - ω_BI_B).',
     #              xlabel = "Time (s)",
     #              ylabel = "RW2 Rate (RPM)"))
-    # display(plot(t, 30/π*rw3.',
+    # display(plot(t, 30/π*([0. 0. -1.; 0. 1. 0.; 1. 0. 0.] * rw3 - ω_BI_B).',
     #              xlabel = "Time (s)",
     #              ylabel = "RW3 Rate (RPM)"))
 

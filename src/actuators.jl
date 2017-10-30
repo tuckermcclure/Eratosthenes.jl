@@ -102,8 +102,10 @@ function CoupledReactionWheel()
 
     # Get the derivative of the state, treating the rotor as a free 3DOF body.
     function derivatives(t, constants, state, draws, implicit, τ_br_cmd, effects, effects_bus)
+        body,      = find_effect(effects, BodyStateEffect())
+        ω_BI_G     = qrot(constants.q_GB, body.ω_BI_B)
         τ_rb_G     = torque(τ_br_cmd, constants, state, implicit)
-        ω_RI_G_dot = constants.I_r_G .\ (τ_rb_G - state.ω_RI_G × (constants.I_r_G .* state.ω_RI_G))
+        ω_RI_G_dot = constants.I_r_G .\ (τ_rb_G - ω_BI_G × (constants.I_r_G .* state.ω_RI_G))
         return CoupledReactionWheelState(ω_RI_G_dot)
     end
 
@@ -118,40 +120,30 @@ function CoupledReactionWheel()
 
     # The torque on the rotor has an equal and opposite torque on the body.
     function effects(t, constants, state, draws, implicit, τ_br_cmd, effects, effects_bus)
-
         τ_rb_G = torque(τ_br_cmd, constants, state, implicit)
         τ_br_B = qrot(qinv(constants.q_GB), -τ_rb_G)
-
-        # Check:
-        # body,  = find_effect(effects, BodyStateEffect())
-        # if body.r_be_I[1] == 1.
-        #     ω_BI_G = qrot(constants.q_GB, body.ω_BI_B)
-        #     τ_br_G = [τ_br_cmd; 0.; 0.] - ω_BI_G × ([constants.I_r_G[1] * state.ω_RI_G[1]; 0.; 0.] + constants.I_r_G .* ω_BI_G)
-        #     τ_br_B_2 = qrot(qinv(constants.q_GB), τ_br_G)
-        #     println("implicit torque: ", τ_br_B, "; analytical torque: ", τ_br_B_2)
-        # end
-        
         (BodyTorque(τ_br_B),)
     end
 
     # Produce the measurement (the rotor speed) and also reset the rotation to
     # be strictly on-axis (removes buildup of constraint torque noise)
     function update(t, constants, state, draws, τ_br_cmd, effects, effects_bus)
-        body,  = find_effect(effects, BodyStateEffect())
+        body, = find_effect(effects, BodyStateEffect())
         ω_BI_G = qrot(constants.q_GB, body.ω_BI_B)
-        state.ω_RI_G[2:3] = ω_BI_G[2:3]
+        state.ω_RI_G[2:3] = ω_BI_G[2:3] # Renormalize.
         (state, state.ω_RI_G[1] - ω_BI_G[1], true)
     end
 
     DynamicalModel("coupled_reaction_wheel",
                    constants = CoupledReactionWheelConstants([1.; 1/sqrt(2.); 1/sqrt(2.)], [0.; 0.; 0.; 1.]),
-                   state = CoupledReactionWheelState([100. * 2pi/60.; 0.; 0.]),
+                   state = CoupledReactionWheelState([1000. * 2pi/60.; 0.; 0.]),
                    inputs = 0., # Requested torque on rotor from body about 1 axis of G frame (Nm)
-                   outputs = 100. * 2pi/60.,
+                   outputs = 1000. * 2pi/60.,
                    implicit = [0.; 0.], # Implicit variables (constraint torque) (Nm)
                    effects = effects,
                    derivatives = derivatives,
                    constraints = constraints,
+                   init = update,
                    update = update,
                    timing = ModelTiming(0.02))
 

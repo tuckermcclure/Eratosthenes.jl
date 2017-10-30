@@ -1,7 +1,7 @@
 include("getset.jl")
 
 # Get all of the effects on all vehicles for the current state.
-function get_effects(t, X, V, D, U, scenario, debug=false)
+function get_effects(t, X, V, D, U, scenario)
 
     # Get all of the effects. Start with the vehicle body. Planets can consume
     # vehicle effects. Components can consume vehicle and planet effects.
@@ -13,10 +13,6 @@ function get_effects(t, X, V, D, U, scenario, debug=false)
         E[scenario.vehicles[c].name][scenario.vehicles[c].body.name] =
             scenario.vehicles[c].body.effects(
                 t, scenario.vehicles[c].body.constants, X[c], nothing, V[c])
-    end
-    asdf = E[scenario.vehicles[c].name][scenario.vehicles[c].body.name][1].r_be_I[1]
-    if debug
-        E[scenario.vehicles[1].name][scenario.vehicles[1].body.name][1].r_be_I[1] = 1.
     end
 
     # Next, we'll get the effect of the environment on each body. While looping
@@ -64,9 +60,7 @@ function get_effects(t, X, V, D, U, scenario, debug=false)
         end
 
     end
-    if debug
-        E[scenario.vehicles[1].name][scenario.vehicles[1].body.name][1].r_be_I[1] = asdf
-    end
+
     return E
 
 end
@@ -186,31 +180,11 @@ function minor(t, X, V, D, U, scenario)
         # V = lm(V -> constraints(...), V, 1e-9)
         
         # Now differentiate the constraints function.
-        # Gx = fdiffX(Xh -> constraints(t, Xh, V, D, U, scenario), X, 1e-9)
-        # display(X)
         Gx = fdiffX(dae, t, X, V, D, U, scenario, 1e-9)
-        # display(Gx) # Works.
-        # display(X)
-        # Fv = fdiffV(ode, t, X, V, D, U, scenario)
-        # display(Fv) # Works.
-
-        # constraints = dae(t, X, V, D, U, scenario)
-        # display(constraints) # Works!?
-        # display(Gx) # Works!?
 
         # Now serach for implicit variables that put the state time derivative in the null 
         # space of the constraint Jacobian.
-        # V = lm(V -> Gx * stackem(ode(t, X, V, D, U, scenario)), V0)
         V, Xd = lmV(ode, t, X, V, D, U, scenario, Gx)
-        # println("Constraint torques: ", stackem(V).')
-
-        # ode(t, X, V, D, U, scenario, true)
-
-        # Check:
-
-        # Xd2 = deepcopy(Xd)
-        # fix_x_dot!(Xd2)
-        # display(Gx * stackem(Xd2))
 
     # Otherwise, just pass through whatever nothingness we're using for them.
     else
@@ -270,10 +244,10 @@ function dae(t, X, V, D, U, scenario)
 end
 
 # Get the vector of derivatives.
-function ode(t, X, V, D, U, scenario, debug=false)
+function ode(t, X, V, D, U, scenario)
 
     # Get all of the effects corresponding to this state.
-    E = get_effects(t, X, V, D, U, scenario, debug) # For DAEs, we already have this.
+    E = get_effects(t, X, V, D, U, scenario) # For DAEs, we already have this.
 
     # Create the set of derivatives that we will write to below.
     derivs = Vector{Any}(length(X)) # Would use eltype(X) but can't if we want to use nothing.
