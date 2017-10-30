@@ -24,26 +24,27 @@ vehicles:
       - model: Gyro # Generic gyro; uses finite difference of q_BI as average rate
         name: gyro
         constants: 
-          angular_random_walk: 0.000001
-          initial_bias_magnitude: 0.00001
-          bias_random_walk: 0.000001
+          angular_random_walk: 0. # 0.000001
+          initial_bias_magnitude: 0. #0.00001
+          bias_random_walk: 0. #0.000001
         timing: { dt: 0.02 }
       - model: StarTracker # Generic star tracker; measures q_BI
         name: star_tracker
+        constants: [0., 0., 0.] # Errors (rad)
         timing: { dt: 0.1 }
-      - model: ReactionWheel
+      - model: CoupledReactionWheel
         name: rw1
         constants:
           q_GB: "[0.; 0.; 0.; 1.]" # Quaternion of rotor frame wrt body, rotates about body X
           I_r_G: "0.25 * [1.; 1/sqrt(2.); 1/sqrt(2.)]" # Moment of inertia in rotor frame
         timing: { dt: 0.02 }
-      - model: ReactionWheel
+      - model: CoupledReactionWheel
         name: rw2
         constants:
           q_GB: "[0.; 0.; 1/sqrt(2.); 1/sqrt(2.)]" # Rotates about body Y
           I_r_G: "0.25 * [1.; 1/sqrt(2.); 1/sqrt(2.)]" # Moment of inertia in rotor frame
         timing: { dt: 0.02 }
-      - model: ReactionWheel
+      - model: CoupledReactionWheel
         name: rw3
         constants:
           q_GB: "[0.; -1/sqrt(2.); 0.; 1/sqrt(2.)]" # Rotates about body Z

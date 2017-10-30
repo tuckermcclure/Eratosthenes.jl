@@ -19,7 +19,6 @@ end
                 return k-length(x)
             end
         else
-            # error("I can't handle setting k for an array of anything other than Reals yet.")
             quote
                 for c = 1:length(x)
                     k = setk!_inner(x[c], k, v)
@@ -28,6 +27,15 @@ end
                     end
                 end
             end
+        end
+    elseif T <: Void
+        quote
+            # We shouldn't be trying to set a Void. Skip it.
+            # if k <= 1
+            #     # x[k] = v
+            #     return 0
+            # end
+            return k
         end
     elseif !isempty(fieldnames(T))
         expr = Vector{Expr}()
@@ -39,6 +47,12 @@ end
                         return 0
                     end
                     k -= 1
+                elseif typeof(x.$f) <: Void # For nothings, we ignore the write.
+                    # if k == 1
+                    #     x.$f = nothing
+                    #     return 0
+                    # end
+                    k # We didn't use any index for this.
                 else # For anything else, it's assumed that we can recur and set something inside the field.
                     k = setk!_inner(x.$f, k, v)
                     if k <= 0
@@ -74,6 +88,13 @@ end
             end
             return (0., k-1)
         end
+    elseif T <: Void
+            quote
+                # if k == 1
+                #     return (0., 0)
+                # end
+                return (0., k)
+            end
     elseif T <: Array
         if eltype(T) <: Real
             quote
@@ -83,7 +104,6 @@ end
                 return (0., k-length(x))
             end
         else
-            # error("I can't handle getting k for an array of anything other than Reals yet.")
             quote
                 for c = 1:length(x)
                     r, k = getk_inner(x[c], k)
@@ -166,6 +186,8 @@ end
         end
     elseif !isempty(fieldnames(T)) # This is nice; we can't do this with multiple dispatch. Do this for + and * and remove the ModelStates thing?
         Expr(:block, ( :( k = stackem!(x, y.$f, k) ) for f in fieldnames(T) )...)
+    elseif T <: Void
+        :(k) # Don't choke on that k, my friend.
     else
         error("Sorry, I don't know how to stack a ", T, ".")
     end

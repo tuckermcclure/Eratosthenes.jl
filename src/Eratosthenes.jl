@@ -101,7 +101,7 @@ DynamicalModel(name;
                state = nothing,
                inputs = nothing,
                outputs = nothing,
-               implicit = nothing,
+               implicit = Vector{Float64}(),
                rand = RandSpec()) =
     DynamicalModel(name, startup, init, effects, constraints, derivatives, update, shutdown, timing, constants, state, inputs, outputs, implicit, rand)
 NullModel() = DynamicalModel("nothing")

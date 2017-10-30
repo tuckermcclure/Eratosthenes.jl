@@ -103,22 +103,26 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
         # TODO: Much of the below looks redundant. Make little functions for this stuff.
 
         # Set up input and output buses.
+        V = Vector{Vector{Float64}}() # TODO: Currently unused.
         for vehicle in scenario.vehicles
-            U[vehicle.name]  = Dict{String,Any}()
+            U[vehicle.name] = Dict{String,Any}()
             Y[vehicle.name] = Dict{String,Any}()
             U[vehicle.name][vehicle.body.name]  = vehicle.body.inputs
             Y[vehicle.name][vehicle.body.name] = vehicle.body.outputs
+            push!(V, vehicle.body.implicit)
             for component in vehicle.components
                 U[vehicle.name][component.name]  = component.inputs
                 Y[vehicle.name][component.name] = component.outputs
+                push!(V, component.implicit)
             end
             for computer in vehicle.computers
-                U[vehicle.name][computer.name]  = Dict{String,Any}()
+                U[vehicle.name][computer.name] = Dict{String,Any}()
                 Y[vehicle.name][computer.name] = Dict{String,Any}()
-                U[vehicle.name][computer.name][computer.board.name]  = computer.board.inputs
+                U[vehicle.name][computer.name][computer.board.name] = computer.board.inputs
                 Y[vehicle.name][computer.name][computer.board.name] = computer.board.outputs
+                push!(V, computer.board.implicit)
                 for software in computer.software
-                    U[vehicle.name][computer.name][software.name]  = software.inputs
+                    U[vehicle.name][computer.name][software.name] = software.inputs
                     Y[vehicle.name][computer.name][software.name] = software.outputs
                 end
             end
@@ -157,7 +161,8 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                         vehicle.body.effects(t[1],
                                              vehicle.body.constants,
                                              vehicle.body.state,
-                                             draw(vehicle.body.rand, :effects))
+                                             draw(vehicle.body.rand, :effects),
+                                             vehicle.body.implicit)
                 else
                     #E[vehicle.name][vehicle.body.name] = () # TODO: Do I need this?
                 end
@@ -201,6 +206,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                             component.constants,
                             component.state,
                             draw(component.rand, :effects),
+                            component.implicit,
                             U[vehicle.name][component.name],
                             E[vehicle.name],
                             E) # TODO: Limit this to the body and environment effects.
@@ -237,6 +243,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                                 computer.board.constants,
                                 computer.board.state,
                                 draw(computer.board.rand, :effects),
+                                computer.board.implicit,
                                 U[vehicle.name][computer.name][computer.board.name],
                                 E[vehicle.name],
                                 E) # TODO: Limit this to the body and environment effects.
@@ -390,24 +397,25 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 # Put all of the continuous-time states in a vector.
                 X = []
                 D = []
+                V = []
                 # TODO: Add environments; they should be able to have continuous states.
                 for vehicle in scenario.vehicles
                     push!(X, vehicle.body.state)
                     push!(D,  draw(vehicle.body.rand, :derivatives))
+                    push!(V, vehicle.body.implicit)
                 end
                 for vehicle in scenario.vehicles
                     for component in vehicle.components
                         push!(X, component.state)
                         push!(D, draw(component.rand, :derivatives))
+                        push!(V, component.implicit)
                     end
                     for computer in vehicle.computers
                         push!(X, computer.board.state)
                         push!(D, draw(computer.board.rand, :derivatives))
+                        push!(V, computer.board.implicit)
                     end
                 end
-
-                # TODO: Get initial values for this somehow.
-                V = [] # Guess at implicit parameters
 
                 # Use RK4 with a constraint solver for semi-explicity, index 1 DAE support.
                 Xd1, V = minor(t[k-1],         X,               V, D, U, scenario)
@@ -421,14 +429,20 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 # TODO: Why bother storing these this way?
                 c = 0
                 for vehicle in scenario.vehicles
-                    vehicle.body.state = X[c += 1]
+                    c += 1
+                    vehicle.body.state    = X[c]
+                    vehicle.body.implicit = V[c]
                 end
                 for vehicle in scenario.vehicles
                     for component in vehicle.components
-                        component.state = X[c += 1]
+                        c += 1
+                        component.state    = X[c]
+                        component.implicit = V[c]
                     end
                     for computer in vehicle.computers
-                        computer.board.state = X[c += 1]
+                        c += 1
+                        computer.board.state    = X[c]
+                        computer.board.implicit = V[c]
                     end
                 end
 

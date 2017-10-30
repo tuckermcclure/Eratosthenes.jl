@@ -1,7 +1,7 @@
 include("getset.jl")
 
 # Get all of the effects on all vehicles for the current state.
-function get_effects(t, X, V, D, U, scenario)
+function get_effects(t, X, V, D, U, scenario, debug=false)
 
     # Get all of the effects. Start with the vehicle body. Planets can consume
     # vehicle effects. Components can consume vehicle and planet effects.
@@ -12,7 +12,11 @@ function get_effects(t, X, V, D, U, scenario)
         E[scenario.vehicles[c].name] = Dict{String, Tuple}()
         E[scenario.vehicles[c].name][scenario.vehicles[c].body.name] =
             scenario.vehicles[c].body.effects(
-                t, scenario.vehicles[c].body.constants, X[c], nothing)
+                t, scenario.vehicles[c].body.constants, X[c], nothing, V[c])
+    end
+    asdf = E[scenario.vehicles[c].name][scenario.vehicles[c].body.name][1].r_be_I[1]
+    if debug
+        E[scenario.vehicles[1].name][scenario.vehicles[1].body.name][1].r_be_I[1] = 1.
     end
 
     # Next, we'll get the effect of the environment on each body. While looping
@@ -29,6 +33,7 @@ function get_effects(t, X, V, D, U, scenario)
                                      scenario.environment.constants,
                                      scenario.environment.state, # TODO: Read from states once environments are allowed to have continuous-time states.
                                      draw(scenario.environment.rand, :effects), # TODO: This draw doesn't belong here. Same below.
+                                     # TODO: Environments can have implicit variables?
                                      effects_bus_copy[vehicle.name],
                                      effects_bus_copy)
         end
@@ -42,30 +47,26 @@ function get_effects(t, X, V, D, U, scenario)
         for component in vehicle.components
             c += 1
             if component.effects != nothing
-                E[vehicle.name][component.name] = component.effects(t,
-                                           component.constants,
-                                           X[c],
-                                           D[c],
-                                           U[vehicle.name][component.name],
-                                           effects_bus_copy[vehicle.name],
-                                           effects_bus_copy)
+                E[vehicle.name][component.name] = component.effects(t, component.constants,
+                                                                    X[c], D[c], V[c],
+                                                                    U[vehicle.name][component.name],
+                                                                    effects_bus_copy[vehicle.name], effects_bus_copy)
             end
         end
         for computer in vehicle.computers
             c += 1
             if computer.board.effects != nothing
-                E[vehicle.name][computer.name] = computer.board.effects(t,
-                                           computer.board.constants,
-                                           X[c],
-                                           D[c],
-                                           U[vehicle.name][computer.name][computer.board.name],
-                                           effects_bus_copy[vehicle.name],
-                                           effects_bus_copy)
+                E[vehicle.name][computer.name] = computer.board.effects(t, computer.board.constants,
+                                                                        X[c], D[c], V[c], 
+                                                                        U[vehicle.name][computer.name][computer.board.name],
+                                                                        effects_bus_copy[vehicle.name], effects_bus_copy)
             end
         end
 
     end
-
+    if debug
+        E[scenario.vehicles[1].name][scenario.vehicles[1].body.name][1].r_be_I[1] = asdf
+    end
     return E
 
 end
@@ -75,17 +76,45 @@ end
 # have the same interface.
 function fdiffX(f::T, t, X, V, D, U, scenario, α=1e-6) where {T <: Function} # Use a ! in the name? It modifies x, but should return it to its original.
     fx = stackem(f(t, X, V, D, U, scenario)) # If n were passed in, this could just be full of 0.
-    n  = length(fx) # This should be constant and could be passed in.
-    J  = zeros(n, n)
-    for k = 1:n
+    nf = length(fx) # This should be constant and could be passed in.
+    nx = length(stackem(X)) # TODO: This is sloppy.
+    J  = zeros(nf, nx)
+    for k = 1:nx
         xo = getk(X, k) # Store the original value
         setk!(X, k, xo + α) # Perturb in the positive direction.
-        stackem!(fx, f(t, X, V, D, U, scenario), 0) # Replace with a version that stacks directly into J[:,k].
+        stackem!(fx, f(t, X, V, D, U, scenario), 0)
         J[:,k] = fx[:] # Copy from the vector to the right place in the Jacobian. Do this with views instead?
         setk!(X, k, xo - α) # And now the negative.
         stackem!(fx, f(t, X, V, D, U, scenario), 0)
         J[:,k] = (J[:,k] - fx) / (2α)
         setk!(X, k, xo) # Return x to what it was.
+    end
+    return J
+end
+
+# Finite differences (central), where the state vector isn't actually a vector.
+# This function takes advantage of the fact that the constraints and ode functions
+# have the same interface.
+function fdiffV(f::T, t, X, V, D, U, scenario, α=1e-6) where {T <: Function} # Use a ! in the name? It modifies x, but should return it to its original.
+    Xd = f(t, X, V, D, U, scenario)
+    fix_x_dot!(Xd) # TODO: Hack!
+    fv = stackem(Xd) # If n were passed in, this could just be full of 0.
+    nf = length(fv) # This should be constant and could be passed in.
+    nv = length(stackem(V)) # TODO: This is sloppy.
+    J  = zeros(nf, nv)
+    for k = 1:nv
+        vo = getk(V, k) # Store the original value
+        setk!(V, k, vo + α) # Perturb in the positive direction.
+        Xd = f(t, X, V, D, U, scenario)
+        fix_x_dot!(Xd) # TODO: Hack!
+        stackem!(fv, Xd, 0) # Replace with a version that stacks directly into J[:,k].
+        J[:,k] = fv[:] # Copy from the vector to the right place in the Jacobian. Do this with views instead?
+        setk!(V, k, vo - α) # And now the negative.
+        Xd = f(t, X, V, D, U, scenario)
+        fix_x_dot!(Xd) # TODO: Hack!
+        stackem!(fv, Xd, 0)
+        J[:,k] = (J[:,k] - fv) / (2α)
+        setk!(V, k, vo) # Return V to what it was.
     end
     return J
 end
@@ -104,28 +133,39 @@ end
 #     return J
 # end
 
-# # Levenberg-Marquardt root solving
-# function lm(G, f, β, λ=1e-6, tol=1e-6, k_max=1000)
-#     k = 0
-#     for k = 0:k_max-1
-#         fk = f(β)
-#         if all(abs.(fk) .< tol)
-#             break
-#         end
-#         J   =  fdiff(f, β)
-#         JtJ =  J.' * J
-#         A   =  JtJ + λ * diagm(diag(JtJ))
-#         σ   =  -(pinv(A) * (J.' * G * fk)) # Use pinv in case of mischief.
-#         β   += σ
-#     end
-#     (β, fk, k)
-# end
+function fix_x_dot!(Xd)
+    Xd[2] = zeros(8,1) # TODO: Hack!
+    Xd[3] = Vector{Float64}()
+    Xd[7] = Vector{Float64}()
+end
+
+# Levenberg-Marquardt root solving
+function lmV(ode, t, X, V, D, U, scenario, Gx, λ=1e-6, tol=1e-12, k_max=1000)
+    k = 0
+    for k = 0:k_max-1
+        Xd = ode(t, X, V, D, U, scenario)
+        fix_x_dot!(Xd)
+        fk = Gx * stackem(Xd)
+        if all(abs.(fk) .< tol)
+            break
+        end
+        J   =  Gx * fdiffV(ode, t, X, V, D, U, scenario)
+        JtJ =  J.' * J
+        A   =  JtJ + λ * diagm(diag(JtJ))
+        σ   =  -(pinv(A) * (J.' * fk)) # Use pinv in case of mischief.
+        for c = 1:length(σ)
+            setk!(V, c, getk(V, c) + σ[c])
+        end
+    end
+    Xd = ode(t, X, V, D, U, scenario) # TODO: Remove when hack is removed.
+    (V, Xd, k)
+end
 
 # Get the derivatives of the entire system when there are algebraic constraints.
 function minor(t, X, V, D, U, scenario)
 
     # If there are algebraic constraints, solve for the implicit forces.
-    if !isempty(V)
+    if !isempty(stackem(V)) # TODO: Sloppy!
 
         # Let g be the constraint function.
         # 
@@ -147,17 +187,31 @@ function minor(t, X, V, D, U, scenario)
         
         # Now differentiate the constraints function.
         # Gx = fdiffX(Xh -> constraints(t, Xh, V, D, U, scenario), X, 1e-9)
-        # Gx = fdiffX(constraints, t, X, V, D, U, scenario, 1e-9)
-        z = constraints(t, X, V, D, U, scenario)
-        display(z)
+        # display(X)
+        Gx = fdiffX(dae, t, X, V, D, U, scenario, 1e-9)
+        # display(Gx) # Works.
+        # display(X)
+        # Fv = fdiffV(ode, t, X, V, D, U, scenario)
+        # display(Fv) # Works.
+
+        # constraints = dae(t, X, V, D, U, scenario)
+        # display(constraints) # Works!?
+        # display(Gx) # Works!?
 
         # Now serach for implicit variables that put the state time derivative in the null 
         # space of the constraint Jacobian.
         # V = lm(V -> Gx * stackem(ode(t, X, V, D, U, scenario)), V0)
+        V, Xd = lmV(ode, t, X, V, D, U, scenario, Gx)
+        # println("Constraint torques: ", stackem(V).')
 
-        # Note that Xd is already calculated above, but we'd need a custom LM to get it.
-        Xd = ode(t, X, V, D, U, scenario)
-        
+        # ode(t, X, V, D, U, scenario, true)
+
+        # Check:
+
+        # Xd2 = deepcopy(Xd)
+        # fix_x_dot!(Xd2)
+        # display(Gx * stackem(Xd2))
+
     # Otherwise, just pass through whatever nothingness we're using for them.
     else
         Xd = ode(t, X, V, D, U, scenario)
@@ -170,13 +224,56 @@ end
 # Get the vector of constraints.
 function dae(t, X, V, D, U, scenario)
     
+    # Get all of the effects corresponding to this state.
+    E = get_effects(t, X, V, D, U, scenario) # TODO: This could be reused.
+
+    # Create the set of constraints that we will write to below.
+    constraints = Vector{Float64}()
+
+    # Get the constraints for each physical thing. We need to do this in the same
+    # order as the states and draws arrays were built.
+    c = 0
+    for vehicle in scenario.vehicles
+        c += 1
+        if vehicle.body.constraints != nothing
+            append!(constraints, vehicle.body.constraints(t, vehicle.body.constants,
+                                                          X[c], D[c], V[c],
+                                                          E[vehicle.name], E))
+        end
+    end
+
+    for vehicle in scenario.vehicles
+        for component in vehicle.components
+            c += 1
+            if component.constraints != nothing
+                asdf = component.constraints(t, component.constants,
+                    X[c], D[c], V[c],
+                    U[vehicle.name][component.name],
+                    E[vehicle.name], E)
+                append!(constraints, asdf)
+            end
+        end
+        for computer in vehicle.computers
+            c += 1
+            if computer.board.constraints != nothing
+                append!(constraints, computer.board.constraints(t, computer.board.constants,
+                                                                X[c], D[c], V[c], 
+                                                                U[vehicle.name][computer.name][computer.board.name],
+                                                                E[vehicle.name], E))
+            end
+        end
+
+    end
+
+    return constraints
+    
 end
 
 # Get the vector of derivatives.
-function ode(t, X, V, D, U, scenario)
+function ode(t, X, V, D, U, scenario, debug=false)
 
     # Get all of the effects corresponding to this state.
-    E = get_effects(t, X, V, D, U, scenario)
+    E = get_effects(t, X, V, D, U, scenario, debug) # For DAEs, we already have this.
 
     # Create the set of derivatives that we will write to below.
     derivs = Vector{Any}(length(X)) # Would use eltype(X) but can't if we want to use nothing.
@@ -189,12 +286,9 @@ function ode(t, X, V, D, U, scenario)
     for vehicle in scenario.vehicles
         c += 1
         if vehicle.body.derivatives != nothing
-            derivs[c] = vehicle.body.derivatives(t,
-                                                 vehicle.body.constants,
-                                                 X[c],
-                                                 D[c],
-                                                 E[vehicle.name],
-                                                 E)
+            derivs[c] = vehicle.body.derivatives(t, vehicle.body.constants,
+                                                 X[c], D[c], V[c], 
+                                                 E[vehicle.name], E)
         end
     end
 
@@ -202,25 +296,19 @@ function ode(t, X, V, D, U, scenario)
         for component in vehicle.components
             c += 1
             if component.derivatives != nothing
-                derivs[c] = component.derivatives(t,
-                                                  component.constants,
-                                                  X[c],
-                                                  D[c],
+                derivs[c] = component.derivatives(t, component.constants,
+                                                  X[c], D[c], V[c], 
                                                   U[vehicle.name][component.name],
-                                                  E[vehicle.name],
-                                                  E)
+                                                  E[vehicle.name], E)
             end
         end
         for computer in vehicle.computers
             c += 1
             if computer.board.derivatives != nothing
-                derivs[c] = computer.board.derivatives(t,
-                                                       computer.board.constants,
-                                                       X[c],
-                                                       D[c],
+                derivs[c] = computer.board.derivatives(t, computer.board.constants,
+                                                       X[c], D[c], V[c], 
                                                        U[vehicle.name][computer.name][computer.board.name],
-                                                       E[vehicle.name],
-                                                       E)
+                                                       E[vehicle.name], E)
             end
         end
 

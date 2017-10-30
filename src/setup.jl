@@ -19,7 +19,7 @@ function setup(model, file_name::String, context::Module = current_module())
     else
         error("I don't know how to load that file type.")
     end
-    display(specs)
+    #display(specs)
     return setup(model, specs, context)
 end
 
