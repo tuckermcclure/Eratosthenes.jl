@@ -91,9 +91,9 @@ function ReactionWheelController()
     end
 
     DynamicalModel("rw_controller",
-                init = step,
-                update = step,
-                timing = ModelTiming(0.05),
-                constants = [0.; 0.; 0.; 1.]) # target quaternion
+                   init = step,
+                   update = step,
+                   timing = ModelTiming(0.05),
+                   constants = [0.; 0.; 0.; 1.]) # target quaternion
 
 end

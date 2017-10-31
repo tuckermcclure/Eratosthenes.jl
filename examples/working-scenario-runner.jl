@@ -33,13 +33,13 @@ scenario = setup("scenarios/reaction-wheel.yaml")
 # end
 # Profile.clear()
 
-# # Run it with text progress (e.g., from VS Code).
-# simulate(scenario) do k, n
-#     if (k-1) % 100 == 0
-#         @printf("Progress: % 5.1f%% done.\n", round(100*(k-1)/(n-1), 1))
-#     end
-#     return true
-# end
+# Run it with text progress (e.g., from VS Code).
+simulate(scenario) do k, n
+    if (k-1) % 100 == 0
+        @printf("Progress: % 5.1f%% done.\n", round(100*(k-1)/(n-1), 1))
+    end
+    return true
+end
 
 # Create a Juno waitbar. This do-block syntax makes sure it gets "closed" even
 # if there's an error.

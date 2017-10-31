@@ -127,13 +127,23 @@ mutable struct SimParams
     SimParams(a,b,c,d,e) = new(a,b,c,d,e)
 end
 
+# A place to keep track of dimensions
+struct ScenarioDimensions
+    nt::Int64 # Timesteps
+    nx::Int64 # Primitive states
+    nxd::Int64 # Primitive state dimensions
+    nv::Int64 # Implicit variables
+    x_to_xd::Vector{Int64}
+end
+
 # Top-level options describing what should happen in the sim.
 mutable struct Scenario
     sim::SimParams
     environment::DynamicalModel
     vehicles::Array{Vehicle,1}
-    Scenario() = new(SimParams(), LowEarthOrbit(), [Vehicle()])
-    Scenario(s,e,va) = new(s,e,va)
+    dims::ScenarioDimensions
+    Scenario() = new(SimParams(), LowEarthOrbit(), [Vehicle()], ScenarioDimensions(0,0,0,0,Vector{Int64}()))
+    Scenario(s,e,va,d) = new(s,e,va,d)
 end
 
 include("simulate.jl")

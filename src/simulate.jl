@@ -95,32 +95,23 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
         # We'll initialize the state for each model and get the inputs and
         # outputs from the appropriate components.
 
-        # TODO: If this init process is meant to set everything up for t=0+,
-        # then shouldn't it also allow software to write to inputs bus? E.g.,
-        # should the software be able to issue commands to the actuators right
-        # upon initialization?
-
         # TODO: Much of the below looks redundant. Make little functions for this stuff.
 
         # Set up input and output buses.
-        V = Vector{Vector{Float64}}() # TODO: Currently unused.
         for vehicle in scenario.vehicles
             U[vehicle.name] = Dict{String,Any}()
             Y[vehicle.name] = Dict{String,Any}()
             U[vehicle.name][vehicle.body.name]  = vehicle.body.inputs
             Y[vehicle.name][vehicle.body.name] = vehicle.body.outputs
-            push!(V, vehicle.body.implicit)
             for component in vehicle.components
                 U[vehicle.name][component.name]  = component.inputs
                 Y[vehicle.name][component.name] = component.outputs
-                push!(V, component.implicit)
             end
             for computer in vehicle.computers
                 U[vehicle.name][computer.name] = Dict{String,Any}()
                 Y[vehicle.name][computer.name] = Dict{String,Any}()
                 U[vehicle.name][computer.name][computer.board.name] = computer.board.inputs
                 Y[vehicle.name][computer.name][computer.board.name] = computer.board.outputs
-                push!(V, computer.board.implicit)
                 for software in computer.software
                     U[vehicle.name][computer.name][software.name] = software.inputs
                     Y[vehicle.name][computer.name][software.name] = software.outputs
@@ -164,7 +155,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                                              draw(vehicle.body.rand, :effects),
                                              vehicle.body.implicit)
                 else
-                    #E[vehicle.name][vehicle.body.name] = () # TODO: Do I need this?
+                    #E[vehicle.name][vehicle.body.name] = () # TODO: Do we want to always have an entry, even if it were to produce no effects? It's a hash table, so it's not clear that this is problematic in terms of speed.
                 end
 
                 # Get the effects of the environment on the body.
@@ -260,7 +251,8 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
 
                         if software.init != nothing
                             software.state,
-                            Y[vehicle.name][computer.name][software.name] =
+                            Y[vehicle.name][computer.name][software.name],
+                            U[vehicle.name] =
                                 software.init(
                                     t[1],
                                     software.constants,
@@ -380,44 +372,79 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 end
             end
 
+            # Put all of the continuous-time states, draws, and implicit variables 
+            # into vectors.
+            X = []
+            D = []
+            V = []
+            # TODO: Add environments; they should be able to have continuous states.
+            for vehicle in scenario.vehicles
+                push!(X, vehicle.body.state)
+                push!(D,  draw(vehicle.body.rand, :derivatives))
+                push!(V, vehicle.body.implicit)
+            end
+            for vehicle in scenario.vehicles
+                for component in vehicle.components
+                    push!(X, component.state)
+                    push!(D, draw(component.rand, :derivatives))
+                    push!(V, component.implicit)
+                end
+                for computer in vehicle.computers
+                    push!(X, computer.board.state)
+                    push!(D, draw(computer.board.rand, :derivatives))
+                    push!(V, computer.board.implicit)
+                end
+            end
+            
+            ##############
+            # Dimensions #
+            ##############
+
+            # On the first sample, we discover some dimensions.
+            if k == 1
+
+                # We'll count up the number of states and the number of elements in the state 
+                # derivative, as well as the mapping between them.
+                nx  = 0
+                nxd = 0
+                x_to_xd = Vector{Int64}()
+
+                # Make a dummy call to the derivatives.
+                Xd = ode(t, X, V, D, U, scenario)
+
+                # For each element of the state and its derivative...
+                for c = 1:length(X)
+                    nxc  = length(stackem(X[c]))  # Determine how many elements it has
+                    nxdc = length(stackem(Xd[c])) # And the number of elements in the derivative.
+                    if nxdc == 0 # If this state is discrete only, add a bunch of zero indices.
+                        append!(x_to_xd, zeros(Int64, nxc))
+                    elseif nxdc == nxc # Otherwise, map from state element to derivative elements.
+                        append!(x_to_xd, nxd + (1:nxdc))
+                    else # And if the numbers of those things don't match, it's a problem.
+                        error("The number of derivatives don't match the number of states for the ", X[c], " type.")
+                    end
+                    nx  += nxc  # Count 'em up.
+                    nxd += nxdc
+                end
+
+                # Store the results.
+                scenario.dims = ScenarioDimensions(nt, nx, nxd, length(stackem(V)), x_to_xd)
+
+            end
+# display(X)
             #############
             # Propagate #
             #############
-
+                
             # Propagate from k-1 to k. We skip the first sample and just log it.
             if k > 1
-
-                # Time step (s)
-                dt = t[k] - t[k-1]
-
+                
                 #####################
                 # Continuous Update #
                 #####################
 
-                # Put all of the continuous-time states in a vector.
-                X = []
-                D = []
-                V = []
-                # TODO: Add environments; they should be able to have continuous states.
-                for vehicle in scenario.vehicles
-                    push!(X, vehicle.body.state)
-                    push!(D,  draw(vehicle.body.rand, :derivatives))
-                    push!(V, vehicle.body.implicit)
-                end
-                for vehicle in scenario.vehicles
-                    for component in vehicle.components
-                        push!(X, component.state)
-                        push!(D, draw(component.rand, :derivatives))
-                        push!(V, component.implicit)
-                    end
-                    for computer in vehicle.computers
-                        push!(X, computer.board.state)
-                        push!(D, draw(computer.board.rand, :derivatives))
-                        push!(V, computer.board.implicit)
-                    end
-                end
-
                 # Use RK4 with a constraint solver for semi-explicity, index 1 DAE support.
+                dt = t[k] - t[k-1] # Time step (s)
                 Xd1, V = minor(t[k-1],         X,               V, D, U, scenario)
                 Xd2, V = minor(t[k-1] + 0.5dt, X + 0.5dt * Xd1, V, D, U, scenario)
                 Xd3, V = minor(t[k-1] + 0.5dt, X + 0.5dt * Xd2, V, D, U, scenario)
@@ -579,6 +606,10 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 end # for each vehicle
 
             end # k > 1
+
+            ###########
+            # Logging #
+            ###########
 
             # Log the continuous states.
             if log != nothing
