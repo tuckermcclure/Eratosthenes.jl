@@ -22,6 +22,11 @@ BodyStateEffect() = BodyStateEffect(zeros(3), zeros(3), [0.; 0.; 0.; 1.], zeros(
 #############
 
 # Find a single instance of an effect in a dictionary of effects.
+# If the dictionary of effects were always the same, then we could
+# make a _generated_ function to just return the one we want. That would
+# be super fast. In fact, it would work even if the list changed sometimes,
+# because we'd just get a new generated function, but that would cause weird
+# delays at runtime, and it would be slow if the list were frequently different.
 function find_effect(effects_bus::Dict{String, Tuple}, null_effect::T) where T
     for effects in values(effects_bus) # effects contains tuple of Effects from each component
         index = findfirst(e->isa(e, T), effects)
@@ -86,6 +91,7 @@ end
 # end
 
 # Acts in place and prevents unnecessary creation of vectors.
+# We could also make this a generated function.
 function accumulate!(x::Vector, effects_bus::Dict, effect_type::Type, f = e->e, args...)
     for effects in values(effects_bus)
         for effect in effects

@@ -55,7 +55,7 @@ mutable struct ModelTiming
     ModelTiming(dt = 0., t_start = 0., t_next = 0., count = 0) = new(dt, t_start, t_next, count)
 end
 
-mutable struct DynamicalModel{F0, FI, FE, FD, FU, FS, DC, DS, DI, DO}
+mutable struct DynamicalModel{F0, FI, FE, FC, FD, FU, FS, DC, DX, DU, DY, DV}
 
     name::String # Actually used as a key in a dictionary, as well as for logging
 
@@ -69,6 +69,7 @@ mutable struct DynamicalModel{F0, FI, FE, FD, FU, FS, DC, DS, DI, DO}
     startup::F0 # Called to allow one to set up resources or whatever.
     init::FI # "Tell me what you produce."
     effects::FE # "Produce physical effects."
+    constraints::FC # "Tell me how well a state satisfies your constraints."
     derivatives::FD # "Tell me how the state is changing."
     update::FU # "Update yourself for this time step."
     shutdown::FS # Called when the sim ends, even when there's an error.
@@ -77,9 +78,10 @@ mutable struct DynamicalModel{F0, FI, FE, FD, FU, FS, DC, DS, DI, DO}
 
     # Data
     constants::DC # This will be set up during setup and will never change afterwards.
-    state::DS # Bonus: return a ModelState to enable "struct addition and multiplication"
-    inputs::DI # Inputs accepted by this model (e.g., commands); software can write to these.
-    outputs::DO # Outputs produced by this model (e.g., measurements); software can consume these.
+    state::DX # Bonus: return a ModelState to enable "struct addition and multiplication"
+    inputs::DU # Inputs accepted by this model (e.g., commands); software can write to these.
+    outputs::DY # Outputs produced by this model (e.g., measurements); software can consume these.
+    implicit::DV # Implicit variables.
 
     rand::RandSpec # Provide the properties of the random number generator stream you'll need.
 
@@ -90,6 +92,7 @@ DynamicalModel(name;
                startup = nothing,
                init = nothing,
                effects = nothing,
+               constraints = nothing,
                derivatives = nothing,
                update = nothing,
                shutdown = nothing,
@@ -98,20 +101,9 @@ DynamicalModel(name;
                state = nothing,
                inputs = nothing,
                outputs = nothing,
+               implicit = Vector{Float64}(),
                rand = RandSpec()) =
-    DynamicalModel(name, startup, init, effects, derivatives, update, shutdown, timing, constants, state, inputs, outputs, rand)
-
-# Convenience constructors
-# Body(name, init, effects, derivatives, shutdown, timing, constants, state, rand = RandSpec()) =
-#     DynamicalModel(name, init, effects, derivatives, nothing, shutdown, timing, constants, state, nothing, nothing, rand)
-# DiscreteSensor(name, init, update, shutdown, timing, constants = nothing, state = nothing, inputs = nothing, outputs = nothing, rand = RandSpec()) =
-#     DynamicalModel(name, init, nothing, nothing, update, shutdown, timing, constants, state, inputs, outputs, rand)
-# DiscreteActuator(name, init, effects, update, shutdown, timing, constants = nothing, state = nothing, inputs = nothing, outputs = nothing, rand = RandSpec()) =
-#     DynamicalModel(name, init, effects, nothing, update, shutdown, timing, constants, state, inputs, outputs, rand)
-# Software(name, init, step, shutdown, inputs, outputs, dt, t_start, constants, state) =
-#     DynamicalModel(name, init, effects, derivatives, update, shutdown, timing, constants, state, inputs, outputs, rand)
-# ConstantModel(name, init, effects, shutdown, constants, rand = RandSpec()) =
-#     DynamicalModel(name, init, effects, derivatives, update, shutdown, timing, constants, state, inputs, outputs, rand)
+    DynamicalModel(name, startup, init, effects, constraints, derivatives, update, shutdown, timing, constants, state, inputs, outputs, implicit, rand)
 NullModel() = DynamicalModel("nothing")
 
 # Include the other code in no particular order.
@@ -135,15 +127,26 @@ mutable struct SimParams
     SimParams(a,b,c,d,e) = new(a,b,c,d,e)
 end
 
+# A place to keep track of dimensions
+struct ScenarioDimensions
+    nt::Int64 # Timesteps
+    nx::Int64 # Primitive states
+    nxd::Int64 # Primitive state dimensions
+    nv::Int64 # Implicit variables
+    x_to_xd::Vector{Int64}
+end
+
 # Top-level options describing what should happen in the sim.
 mutable struct Scenario
     sim::SimParams
     environment::DynamicalModel
     vehicles::Array{Vehicle,1}
-    Scenario() = new(SimParams(), LowEarthOrbit(), [Vehicle()])
-    Scenario(s,e,va) = new(s,e,va)
+    dims::ScenarioDimensions
+    Scenario() = new(SimParams(), LowEarthOrbit(), [Vehicle()], ScenarioDimensions(0,0,0,0,Vector{Int64}()))
+    Scenario(s,e,va,d) = new(s,e,va,d)
 end
 
 include("simulate.jl")
+include("mc.jl")
 
 end

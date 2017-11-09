@@ -19,7 +19,7 @@ function Body()
     # Bodies are the top-lever dynamical objects; they produce effects for
     # others to consume and will see all of the effects of others in their
     # derivatives fuction.
-    function effects(t, constants, state, draws)
+    function effects(t, constants, state, draws, implicit)
         return (BodyStateEffect(state.r_be_I, state.v_be_I, state.q_BI, state.ω_BI_B),)
     end
 
@@ -27,7 +27,7 @@ function Body()
     # forces. Note that the effects used must be compatible with the models
     # expected to consume them. This Body models consumes Gravity, BodyForce,
     # and BodyTorque at the moment.
-    function derivatives(t, constants, state, draws, effects, effects_bus)
+    function derivatives(t, constants, state, draws, implicit, effects, effects_bus)
 
         # Extract
         q_BI   = state.q_BI

@@ -64,12 +64,15 @@ if !isempty(scenario.sim.log_file)
     # error-handling, so we can just read whatever we want and return it.
     t, q_BI, ω_BI_B, rw1, rw2, rw3 = # , t_st, q_BI_meas, t_gyro, ω_BI_B_meas
         HDF5.h5open(scenario.sim.log_file, "r") do logs
-            (read(logs, "/cube1/body/state/time"),
-             read(logs, "/cube1/body/state/data/q_BI"),
-             read(logs, "/cube1/body/state/data/ω_BI_B"),
-             read(logs, "/cube1/rw1/state/data"),
-             read(logs, "/cube1/rw2/state/data"),
-             read(logs, "/cube1/rw3/state/data"),
+            (read(logs, "/smallsat1/body/state/time"),
+             read(logs, "/smallsat1/body/state/data/q_BI"),
+             read(logs, "/smallsat1/body/state/data/ω_BI_B"),
+            #  read(logs, "/cube1/rw1/state/data"),
+            #  read(logs, "/cube1/rw2/state/data"),
+            #  read(logs, "/cube1/rw3/state/data"),
+             read(logs, "/smallsat1/rw1/state/data/ω_RI_G"),
+             read(logs, "/smallsat1/rw2/state/data/ω_RI_G"),
+             read(logs, "/smallsat1/rw3/state/data/ω_RI_G"),
              #read(logs, "/cube1/star_tracker/outputs/time"),
              #read(logs, "/cube1/star_tracker/outputs/data"),
              #read(logs, "/cube1/gyro/outputs/time"),
@@ -96,19 +99,38 @@ if !isempty(scenario.sim.log_file)
                  label  = ["ω1" "ω2" "ω3"],
                  xlabel = "Time (s)",
                  ylabel = "Rotation Rate (deg/s)"))
-    display(plot(t, 30/π*[rw1; rw2; rw3].',
+
+    display(plot(randn(5,5))) # Dummy. This doesn't show up, but the next will?
+
+    display(plot(t, 30/π*[rw1[1,:] rw2[1,:] rw3[1,:]],
                  label  = ["rw1" "rw2" "rw3"],
                  xlabel = "Time (s)",
                  ylabel = "Wheel Rate (RPM)"))
-    display(plot(t, 30/π*squeeze(rw1,1),
-                 xlabel = "Time (s)",
-                 ylabel = "RW1 Rate (RPM)"))
-    display(plot(t, 30/π*squeeze(rw2,1),
-                 xlabel = "Time (s)",
-                 ylabel = "RW2 Rate (RPM)"))
-    display(plot(t, 30/π*squeeze(rw3,1),
-                 xlabel = "Time (s)",
-                 ylabel = "RW3 Rate (RPM)"))
+
+    # # For coupled reaction wheels:
+    # display(plot(t, 30/π*(rw1 - ω_BI_B).',
+    #              xlabel = "Time (s)",
+    #              ylabel = "RW1 Rate (RPM)"))
+    # display(plot(t, 30/π*(rw1 - ω_BI_B).',
+    #              xlabel = "Time (s)",
+    #              ylabel = "RW1 Rate (RPM)")) # I need two of this plot to get it plotted once??
+    # display(plot(t, 30/π*([0. -1. 0.; 1. 0. 0.; 0. 0. 1.] * rw2 - ω_BI_B).',
+    #              xlabel = "Time (s)",
+    #              ylabel = "RW2 Rate (RPM)"))
+    # display(plot(t, 30/π*([0. 0. -1.; 0. 1. 0.; 1. 0. 0.] * rw3 - ω_BI_B).',
+    #              xlabel = "Time (s)",
+    #              ylabel = "RW3 Rate (RPM)"))
+
+    # # For simple reaction wheels:
+    # display(plot(t, 30/π*squeeze(rw1,1),
+    #              xlabel = "Time (s)",
+    #              ylabel = "RW1 Rate (RPM)"))
+    # display(plot(t, 30/π*squeeze(rw2,1),
+    #              xlabel = "Time (s)",
+    #              ylabel = "RW2 Rate (RPM)"))
+    # display(plot(t, 30/π*squeeze(rw3,1),
+    #              xlabel = "Time (s)",
+    #              ylabel = "RW3 Rate (RPM)"))
 
     # Save the individual plots before showing them together.
     # savefig(p1, "out/sim-results-q.png")

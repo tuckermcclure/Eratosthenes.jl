@@ -1,15 +1,9 @@
 Improvements:
 
-* Implement effects system.
-* Sensors and actuators are the same thing; make "components".
-* Actuators should have continuous states.
 * Add logging for everything and a way to specify what to log.
-X Handle draws over continuous time.
-X Actuators and planet should register phenomena in various domains (mechanical, magnetic field, radiation, power).
-* Continuous-time dynamics should allow dynamical coupling.
-* Add doc strings.
-* Add examples.
 * Allow a section in a YAML file to start from another YAML file.
+* Add examples.
+* Add doc strings.
 
 Bonus:
 
@@ -18,11 +12,8 @@ Bonus:
 * A way to specify orbital elements instead of position and velocity. Does this imply a "parameter" field, as opposed to "constants" and "state"? Could "constants" include the notion of "parameters"?
 * Derive immutable structs from mutable structs (macros) and convert after setup has completed.
 * Implement SArrays and use with jitl, sitl, and pitl.
-* Allow YAML files to start from other YAML files and then just override defaults.
 
 Questions:
-
-Why not show me what measurements and commands look like on model creation, and then just allow `init` to return the initial state? Perhaps models will want to change their measurements or commands?
 
 How do we decide what gets logged?
 -> Maintain a list of signals to log, e.g.:
@@ -39,13 +30,3 @@ Can we automatically plot what gets logged?
 -> Could use the spec above, too.
 -> Difficult in Juno, which only has a single plot in the plot pane.
 -> Difficult to specify custom setups. Probably best left to the user.
-
-How do we allow actuators to have continuous states?
--> Break state up into continuous and dynamic components? This seems reasonable, since the variables are actually pretty different, but it requires two twos: one for discrete and one for continuous.
--> Keep them together, but return `nothing` for discrete fields as output of `derivatives`. This is tedious.
--> We can allow the discrete update to overwrite the continuous state if desired.
-
-How do we make a consistent environment?
--> Make planet a Model?
-
-Constructors could have arguments.
