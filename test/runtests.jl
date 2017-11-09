@@ -24,7 +24,7 @@ b = normalize([2., 2., 1., -2.])
 
 # Create an actuator that provides a constant torque.
 function Constorquer()
-    function effects(t, constants, state, draws, command, effects, effects_bus)
+    function effects(t, constants, state, draws, implicit, inputs, effects, effects_bus)
         return (BodyTorque(constants),)
     end
     DynamicalModel("constorquer",
