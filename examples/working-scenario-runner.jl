@@ -64,15 +64,15 @@ if !isempty(scenario.sim.log_file)
     # error-handling, so we can just read whatever we want and return it.
     t, q_BI, ω_BI_B, rw1, rw2, rw3 = # , t_st, q_BI_meas, t_gyro, ω_BI_B_meas
         HDF5.h5open(scenario.sim.log_file, "r") do logs
-            (read(logs, "/cube1/body/state/time"),
-             read(logs, "/cube1/body/state/data/q_BI"),
-             read(logs, "/cube1/body/state/data/ω_BI_B"),
+            (read(logs, "/smallsat1/body/state/time"),
+             read(logs, "/smallsat1/body/state/data/q_BI"),
+             read(logs, "/smallsat1/body/state/data/ω_BI_B"),
             #  read(logs, "/cube1/rw1/state/data"),
             #  read(logs, "/cube1/rw2/state/data"),
             #  read(logs, "/cube1/rw3/state/data"),
-             read(logs, "/cube1/rw1/state/data/ω_RI_G"),
-             read(logs, "/cube1/rw2/state/data/ω_RI_G"),
-             read(logs, "/cube1/rw3/state/data/ω_RI_G"),
+             read(logs, "/smallsat1/rw1/state/data/ω_RI_G"),
+             read(logs, "/smallsat1/rw2/state/data/ω_RI_G"),
+             read(logs, "/smallsat1/rw3/state/data/ω_RI_G"),
              #read(logs, "/cube1/star_tracker/outputs/time"),
              #read(logs, "/cube1/star_tracker/outputs/data"),
              #read(logs, "/cube1/gyro/outputs/time"),

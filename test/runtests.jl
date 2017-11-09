@@ -61,12 +61,32 @@ q     = normalize(scenario.vehicles[1].body.state.q_BI)
 # Example #
 ###########
 
+# If the out directory doesn't exist, make it.
+if !isdir("out")
+    mkdir("out")
+end
+
+# min-scenario
 success = false;
 try
     include("run-min-scenario-ci.jl")
     success = true;
 catch err
     println("There was an error running the basic example.")
+    rethrow(err)
+end
+
+@test success == true
+
+# coupled reaction wheel scenario
+success = false;
+try
+    scenario = setup(joinpath(Pkg.dir("Eratosthenes"), "examples", "scenarios", "reaction-wheel.yaml"))
+    scenario.sim.t_end = 1.
+    simulate(scenario)
+    success = true;
+catch err
+    println("There was an error running the reaction wheel example.")
     rethrow(err)
 end
 

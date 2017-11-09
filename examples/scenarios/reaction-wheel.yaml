@@ -8,7 +8,7 @@ environment:
   model: LowEarthOrbit # Includes gravity, magnetic field, air density (or should environments be plural, and _each_ of these is a model?)
 vehicles:
   - model: Vehicle # Generic rigid body with inertial state
-    name: cube1
+    name: smallsat1
     body: # No need to specify the model; the default body will do for us.
       constants:
         m: 55. # Mass of the body (kg); components can have their own masses via Mass effects
@@ -23,7 +23,7 @@ vehicles:
     components: # Low-level stuff, like sensors and actuators; these run "before" software on common timesteps.
       - model: Gyro # Generic gyro; uses finite difference of q_BI as average rate
         name: gyro
-        constants: 
+        constants:
           angular_random_walk: 0. # 0.000001
           initial_bias_magnitude: 0. #0.00001
           bias_random_walk: 0. #0.000001
