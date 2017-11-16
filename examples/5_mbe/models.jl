@@ -1,0 +1,129 @@
+# We'll use a module to store all of our models.
+module MBEModels
+
+# This module will naturally need the types defined in Eratosthenes.
+using Eratosthenes
+
+# We'll also use the quaternion stuff that's conveniently included with Eratosthenes.
+include(joinpath(Pkg.dir("Eratosthenes"), "src", "EratosthenesRotations.jl"))
+using .EratosthenesRotations # Only used for qdiff
+
+# Export things that need to be available for the user.
+export ReducedEffortUnderactuatedController, REUCConstants
+
+# Create a type to store the constants the controller will need.
+mutable struct REUCConstants
+    q_TI::Vector{Float64} # Quaternion representing target orientation of body wrt ICRF
+    κc::Float64 # Control gain
+    μc::Float64 # Control gain
+    ρ::Float64 # Control gain
+    α::Float64 # Control gain
+    I::Float64 # Moment of inertia
+end
+
+# Create the rate control law.
+function rate_controller(I, κc, μc, ρ, α, q_TI, q_BI, ω_BI_B)
+    
+    # Parameterize the rotation rate. Note that ω_BI_B[3] is presumed to be 0.
+    ω = ω_BI_B[1] + im * ω_BI_B[2]
+
+    # Turn the target orientation quaternion and current orientation into
+    # the z-w parameters. This comes from:
+    # 
+    # Tsiotras, P., and Longuski, J. M., “A New Parameterization of the
+    # Attitude Kinematics,” Journal of the Astronautical Sciences, Vol. 43,
+    # No. 3, 1995, pp. 243–262. 
+    # 
+    # Note that this parameterization fails for the "upside down" case. We can 
+    # deal with that later in the development.
+    q  = qdiff(q_BI, q_TI)
+    z  = 2 * atan2(q[3], q[4]) # 2 * atan(q[3]/q[4])
+    w1 = (q[2] * q[3] + q[4] * q[1]) / (q[4]^2 + q[3]^2)
+    w2 = (q[4] * q[2] - q[1] * q[3]) / (q[4]^2 + q[3]^2)
+    w  = w1 + im * w2
+    
+    # And calculate its rate of change (Eq. 13a).
+    w_dot = 0.5 * ω + 0.5 * conj(ω) * w^2
+
+    # Form the ratio that separates the phase space into good and bad 
+    # regions (Eq. 17).
+    v = w*conj(w)
+    η = z / v
+
+    # Form the gains (Eq. 21a and b). These "destabilize" when in the bad 
+    # region and drive the system to equilibrium when in the good regions.
+    temp = atan(ρ * (1 - η^2))
+    κ = 2. * κc / π * temp
+    μ = μc / π * temp + 0.5 * μc
+    
+    # Form the desired rate (Eq. 19).
+    ω_d = -κ * w - im * μ * (z/conj(w))
+
+    # Form the rate error (Eq. 40).
+    e = ω - ω_d
+
+    # Eq. 42
+    η_dot = -μ * η + κ * (1 + v) * η + imag(e/w) - (1 + v) * η * real(e/w)
+
+    # Eq. 37a
+    temp  = ρ / (1 + ρ^2 * (1 - η^2)^2) * η * η_dot
+    κ_dot = -4 * κc / π * temp
+    μ_dot = -2 * μc / π * temp
+
+    # Calculate the rate of change of the desired rate (Eq. 36).
+    ω_d_dot = (-κ_dot * w - κ * w_dot - im * μ_dot * η * w 
+               - im * μ * η_dot * w - im * μ * η * w_dot)
+
+    # Create the feedback control torque (Eq. 41).
+    u = ω_d_dot - α * (ω + κ * w + im * μ * η * w)
+
+    # Turn the torque parameterization into a torque command.
+    return τ_B = [I * real(u); I * imag(u); 0.]
+
+end
+
+# Create a function that constructs a DynamicalModel to act as our controller.
+function ReducedEffortUnderactuatedController()
+
+    # Create the model's update function to read from the sensors, determine the
+    # desired rate, determine the torque to achieve the desired rate, and send the
+    # torque command to the actuators.
+    function step(t, constants, state, inputs, outputs_bus, inputs_bus)
+
+        # Extract the attitude and rate.
+        ω_BI_B = outputs_bus["truth_sensor"].ω_BI_B
+        q_BI   = outputs_bus["truth_sensor"].q_BI
+
+        # Run the controller.
+        τ_B = rate_controller(constants.I, 
+                              constants.κc, 
+                              constants.μc, 
+                              constants.ρ, 
+                              constants.α, 
+                              constants.q_TI, 
+                              q_BI, ω_BI_B)
+
+        # Send the torque command to the actuators.
+        inputs_bus["ideal_actuator"] = IdealActuatorCommand([0.; 0.; 0.], τ_B) # Torque only (no force)
+
+        # Return a bunch of things.
+        return (state,      # Updated state (none)
+                nothing,    # Outputs
+                inputs_bus, # Updated inputs bus (this is not necessary)
+                true)       # Active
+
+    end
+    
+    # Create the default set of constants needed by the controller.
+    constants = REUCConstants([0.; 0.; 0.; 1.], 0.25, 0.5, 2., 10., 5.)
+
+    # Create the model.
+    DynamicalModel("controller",
+                   init = step,
+                   update = step,
+                   constants = constants,
+                   timing = ModelTiming(0.05))
+
+end # model constructor
+
+end # module
