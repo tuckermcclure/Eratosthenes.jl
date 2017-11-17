@@ -68,7 +68,7 @@ Complex cmult(Complex a, Complex b)
 }
 Complex cdiv(Complex a, Complex b) // a / b
 {
-    double scale = 1./(b.real * b.real + b.imag + b.imag);
+    double scale = 1./(b.real * b.real + b.imag * b.imag);
     Complex c = {(a.real * b.real + a.imag * b.imag) * scale, 
                  (a.imag * b.real - a.real * b.imag) * scale};
     return c;
@@ -119,7 +119,7 @@ EXPORT void reuc(double I, double kappa_c, double mu_c, double rho, double alpha
 
     // Turn the target orientation and current orientation into the z-w parameters.
     qdiff(q_BI, q_TI, q);
-    z = 2 * atan2(q[2], q[3]);
+    z = 2. * atan2(q[2], q[3]);
     w.real = (q[1] * q[2] + q[3] * q[0]) / (q[3]*q[3] + q[2]*q[2]);
     w.imag = (q[3] * q[1] - q[0] * q[2]) / (q[3]*q[3] + q[2]*q[2]);
 

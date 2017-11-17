@@ -52,7 +52,7 @@ function rate_controller(I, κc, μc, ρ, α, q_TI, q_BI, ω_BI_B)
 
     # Form the ratio that separates the phase space into good and bad 
     # regions (Eq. 17).
-    v = w*conj(w)
+    v = real(w*conj(w))
     η = z / v
 
     # Form the gains (Eq. 21a and b). These "destabilize" when in the bad 
@@ -68,7 +68,8 @@ function rate_controller(I, κc, μc, ρ, α, q_TI, q_BI, ω_BI_B)
     e = ω - ω_d
 
     # Eq. 42
-    η_dot = -μ * η + κ * (1 + v) * η + imag(e/w) - (1 + v) * η * real(e/w)
+    e_over_w = e/w
+    η_dot = -μ * η + κ * (1 + v) * η + imag(e_over_w) - (1 + v) * η * real(e_over_w)
 
     # Eq. 37a
     temp  = ρ / (1 + ρ^2 * (1 - η^2)^2) * η * η_dot
@@ -139,9 +140,7 @@ end # model constructor
 # C Implementation #
 ####################
 
-# The C implementation is in reuc.c and can be built with:
-# 
-# TODO
+# The C implementation is in reuc.c. See that file for build details.
 
 # Create the constants for SITL, which include the normal parameters as well
 # as the C library to call.

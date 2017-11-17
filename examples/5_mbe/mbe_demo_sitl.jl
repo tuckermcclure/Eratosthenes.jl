@@ -1,17 +1,6 @@
-# mbe_demo.jl
+# mbe_demo_sitl.jl
 #
-# This script contains the work towards a "reduced effort" control law for an
-# underactuated vehicle. In includes the initial simulation, the Monte-Carlo
-# runs, and TODO.
-#
-# To run this file, start Julia, navigate to the directory containing this 
-# file, and just include it in your main workspace, like so:
-#
-# ```
-# $ julia
-# julia> cd(Pkg.dir("Eratosthenes") * "/examples/5_mbe")
-# julia> include("mbe_demo.jl")
-# ```
+# This script runs the C implementation of the control law in the simulation.
 
 # Include our custom models.
 include("models.jl")
