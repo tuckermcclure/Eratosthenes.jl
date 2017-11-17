@@ -132,10 +132,11 @@ function StarTrackerAndGyroController()
 
     # Tell the target that we're done, and then close the socket.
     function shutdown(t, constants, state)
-        println("Shutting down the StarTrackerAndGyroController.")
         if constants.mode == sitl
+            println("Shutting down the StarTrackerAndGyroController library.")
             Libdl.dlclose(constants.c_lib)
         elseif constants.mode == pitl
+            println("Shutting down the StarTrackerAndGyroController UDP connection.")
             # Send a status of 0 to indicate that things are over now.
             udp_send(constants.conn, 0)
             udp_close(constants.conn)

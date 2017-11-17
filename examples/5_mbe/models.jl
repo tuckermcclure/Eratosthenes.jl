@@ -10,6 +10,7 @@ using .EratosthenesRotations # Only used for qdiff
 
 # Export things that need to be available for the user.
 export ReducedEffortUnderactuatedController, REUCConstants
+export ReducedEffortUnderactuatedControllerSITL, REUCSITLConstants
 
 # Create a type to store the constants the controller will need.
 mutable struct REUCConstants
@@ -20,6 +21,10 @@ mutable struct REUCConstants
     α::Float64 # Control gain
     I::Float64 # Moment of inertia
 end
+
+###############
+# Control Law #
+###############
 
 # Create the rate control law.
 function rate_controller(I, κc, μc, ρ, α, q_TI, q_BI, ω_BI_B)
@@ -82,6 +87,10 @@ function rate_controller(I, κc, μc, ρ, α, q_TI, q_BI, ω_BI_B)
 
 end
 
+########################
+# Julia Implementation #
+########################
+
 # Create a function that constructs a DynamicalModel to act as our controller.
 function ReducedEffortUnderactuatedController()
 
@@ -109,7 +118,7 @@ function ReducedEffortUnderactuatedController()
         # Return a bunch of things.
         return (state,      # Updated state (none)
                 nothing,    # Outputs
-                inputs_bus, # Updated inputs bus (this is not necessary)
+                inputs_bus, # Updated inputs bus
                 true)       # Active
 
     end
@@ -125,5 +134,93 @@ function ReducedEffortUnderactuatedController()
                    timing = ModelTiming(0.05))
 
 end # model constructor
+
+####################
+# C Implementation #
+####################
+
+# The C implementation is in reuc.c and can be built with:
+# 
+# TODO
+
+# Create the constants for SITL, which include the normal parameters as well
+# as the C library to call.
+mutable struct REUCSITLConstants
+    c_lib::Ptr{Void} # Points to library
+    c_fcn::Ptr{Void} # Points to function in library
+    parameters::REUCConstants # Normal parameters
+end
+
+# Create a function that constructs a DynamicalModel that will call our
+# C code  version of the controller.
+function ReducedEffortUnderactuatedControllerSITL()
+
+    # This function gets called when the simulation is starting up. It's
+    # a good place to load the C library.
+    function startup(t, constants, state)
+        if is_windows()
+            constants.c_lib = Libdl.dlopen("windows/lib-reuc.dll")
+        else
+            constants.c_lib = Libdl.dlopen("linux/lib-reuc.so")
+        end
+        constants.c_fcn = Libdl.dlsym(constants.c_lib, :reuc)
+    end
+
+    # This function gets called when the simulation is over, even if
+    # there was an error. We can use it to close out the library.
+    function shutdown(t, constants, state)
+        Libdl.dlclose(constants.c_lib)
+    end
+
+    # Create the model's update function to read from the sensors, determine the
+    # desired rate, determine the torque to achieve the desired rate, and send the
+    # torque command to the actuators.
+    function step(t, constants, state, inputs, outputs_bus, inputs_bus)
+
+        # Extract the attitude and rate.
+        ω_BI_B = outputs_bus["truth_sensor"].ω_BI_B
+        q_BI   = outputs_bus["truth_sensor"].q_BI
+
+        # Run the controller.
+        τ_B = [0.; 0.; 0.]
+        ccall(constants.c_fcn, # Function to call
+              Void, # No return value
+              # Function interface:
+              (Float64, Float64, Float64, Float64, Float64, # Parameters
+               Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, # Quaternions and rate
+               Ptr{Float64}), # Output torque
+              # Actual values to pass:
+              constants.parameters.I, constants.parameters.κc, constants.parameters.μc,
+              constants.parameters.ρ, constants.parameters.α, 
+              constants.parameters.q_TI, q_BI, ω_BI_B,
+              τ_B)
+
+        # Send the torque command to the actuators.
+        inputs_bus["ideal_actuator"] = IdealActuatorCommand([0.; 0.; 0.], τ_B) # Torque only (no force)
+
+        # Return a bunch of things.
+        return (state,      # Updated state (none)
+                nothing,    # Outputs
+                inputs_bus, # Updated inputs bus
+                true)       # Active
+
+    end
+    
+    # Create the default set of constants needed by the controller.
+    constants = REUCSITLConstants(
+        Ptr{Void}(0), # C lib
+        Ptr{Void}(0), # C function
+        REUCConstants([0.; 0.; 0.; 1.], 0.25, 0.5, 2., 10., 5.))
+
+    # Create the model.
+    DynamicalModel("controller",
+                   startup = startup,
+                   shutdown = shutdown,
+                   init = step,
+                   update = step,
+                   constants = constants,
+                   timing = ModelTiming(0.05))
+
+end # SITL model constructor
 
 end # module
