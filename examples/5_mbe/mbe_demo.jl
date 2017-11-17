@@ -13,6 +13,9 @@
 # julia> include("mbe_demo.jl")
 # ```
 
+# Include our custom models.
+include("models.jl")
+
 # We work inside a module because it's more flexible than the main workspace.
 module MBEDemo
 
@@ -21,11 +24,10 @@ module MBEDemo
 #############
 
 # Use/import the modules we'll need.
-using Eratosthenes   # The simulation engine (setup, simulate, mc)
-include("models.jl") # The custom models we're developing.
-using .MBEModels     # This "uses" the MBEModels module defined in models.jl.
-import HDF5          # For loading the log file
-using Plots          # For plotting our results
+using Eratosthenes # The simulation engine (setup, simulate, mc)
+using ..MBEModels  # The MBEModels module included above (and "above" this module)
+import HDF5        # For loading the log file
+using Plots        # For plotting our results
 
 # Create a directory for the log file.
 if !isdir("out"); mkdir("out"); end

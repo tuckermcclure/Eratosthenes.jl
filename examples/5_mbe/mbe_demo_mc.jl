@@ -9,14 +9,14 @@
 # 
 
 # To run the sims in parallel, we'll need to make some new workers.
-if nworkers() == 1
-    addprocs(4) # Add some workers.
+if nworkers() == 1 # Add them iff we haven't already added some workers.
+    addprocs(3) # Add 3 workers.
 end
 
 # The workers need to know about our models, so include them everywhere.
 @everywhere include("models.jl")
 
-module MBEDemoMC # We work inside a module because it's more flexible than the main workspace.
+module MBEDemoMC
 
 #############
 # Resources #
@@ -31,28 +31,28 @@ using Plots          # For plotting our results
 # Create a directory for the log file.
 if !isdir("out"); mkdir("out"); end
 
-##############
-# Simulation #
-##############
+####################
+# Monte Carlo Runs #
+####################
 
-# Specify the name of the YAML file that defines our scenario.
+# Build the scenario from the YAML file.
 yaml_file = joinpath(@__DIR__, "underactuated.yaml")
-
-# Choose a number of runs.
-n_runs = 50
+scenario  = setup(yaml_file)
 
 # There's no randomness in our sim by default. Let's randomize the initial
 # attitude. The Body model that we're using (the default) has a parameter
 # for the standard deviation of initial attitude perturbations. We'll
 # overwrite that here and then run the MC with the updated scenario.
-scenario = setup(yaml_file)
 scenario.vehicles[1].body.constants.Δq = π/2 * ones(3)
+
+# Choose a number of runs.
+n_runs = 50
 
 # Now tell Julia to run the scenarion n times. Each will have a different
 # initial attitude.
 mc(scenario, n_runs)
 
-# Get the quaternions from every run.
+# Get the quaternions from the log file for every run.
 t = Float64[] # The time steps will be the same for every run.
 q = Float64[] # We'll store all of the quaternions here, side by side.
 for k = 1:n_runs
@@ -81,7 +81,5 @@ display(plot(t, q.',
     title  = "Attitude from " * string(n_runs) * " Runs"))
 
 # Next up: software-in-the-loop
-
-# Then: hardware-in-the-loop
 
 end # module
