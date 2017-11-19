@@ -8,18 +8,23 @@ using Eratosthenes
 include(joinpath(Pkg.dir("Eratosthenes"), "src", "EratosthenesRotations.jl"))
 using .EratosthenesRotations # Only used for qdiff
 
+# For PITL, we'll need UDP stuff.
+include(joinpath(Pkg.dir("Eratosthenes"), "examples", "utilities", "UDPConnections.jl"))
+using .UDPConnections
+
 # Export things that need to be available for the user.
 export ReducedEffortUnderactuatedController, REUCConstants
 export ReducedEffortUnderactuatedControllerSITL, REUCSITLConstants
+export ReducedEffortUnderactuatedControllerPITL, REUCPITLConstants
 
 # Create a type to store the constants the controller will need.
 mutable struct REUCConstants
     q_TI::Vector{Float64} # Quaternion representing target orientation of body wrt ICRF
     κc::Float64 # Control gain
     μc::Float64 # Control gain
-    ρ::Float64 # Control gain
-    α::Float64 # Control gain
-    I::Float64 # Moment of inertia
+    ρ::Float64  # Control gain
+    α::Float64  # Control gain
+    I::Float64  # Moment of inertia
 end
 
 ###############
@@ -136,10 +141,17 @@ function ReducedEffortUnderactuatedController()
 
 end # model constructor
 
-####################
-# C Implementation #
-####################
+########################
+# Software-in-the-Loop #
+########################
 
+# We've implemented a new model to run the C implementation. We could instead
+# have used the model about and added an option to the constants for which 
+# version to run (Julia, SITL, PITL), but that would make the basic model
+# more difficult to read. To keep it simple for the sake of this demo, we've
+# opted to take the approach of keeping SITL and PITL as separate models, at
+# the expense of a little redundant code.
+# 
 # The C implementation is in reuc.c. See that file for build details.
 
 # Create the constants for SITL, which include the normal parameters as well
@@ -221,5 +233,84 @@ function ReducedEffortUnderactuatedControllerSITL()
                    timing = ModelTiming(0.05))
 
 end # SITL model constructor
+
+
+#########################
+# Processor-in-the-Loop #
+#########################
+
+# See reuc-pitl.c.
+
+# Create the constants for SITL, which include the normal parameters as well
+# as the C library to call.
+mutable struct REUCPITLConstants
+    conn::UDPConnection
+    parameters::REUCConstants # Normal parameters
+end
+
+# Create a function that constructs a DynamicalModel that will call our
+# C code  version of the controller.
+function ReducedEffortUnderactuatedControllerPITL()
+
+    # This function gets called when the simulation is starting up. It's
+    # a good place to load the C library.
+    function startup(t, constants, state)
+        println("Connecting to target.")
+        udp_connect(constants.conn)
+    end
+
+    # This function gets called when the simulation is over, even if
+    # there was an error. We can use it to close out the library.
+    function shutdown(t, constants, state)
+        println("Disconnecting from target.")
+        udp_send(constants.conn, 0)
+        udp_close(constants.conn)
+    end
+
+    # Create the model's update function to read from the sensors, determine the
+    # desired rate, determine the torque to achieve the desired rate, and send the
+    # torque command to the actuators.
+    function step(t, constants, state, inputs, outputs_bus, inputs_bus)
+
+        # Extract the attitude and rate.
+        ω_BI_B = outputs_bus["truth_sensor"].ω_BI_B
+        q_BI   = outputs_bus["truth_sensor"].q_BI
+
+        # Run the controller.
+        udp_send(constants.conn, 1, 
+            constants.parameters.I, constants.parameters.κc, constants.parameters.μc,
+            constants.parameters.ρ, constants.parameters.α, 
+            constants.parameters.q_TI, q_BI, ω_BI_B)
+        sleep(0.001)
+        τ_B_tuple = (0., 0., 0.)
+        τ_B_tuple, = udp_receive(constants.conn, τ_B_tuple)
+        τ_B = [τ_B_tuple...]
+
+        # Send the torque command to the actuators.
+        inputs_bus["ideal_actuator"] = IdealActuatorCommand([0.; 0.; 0.], τ_B) # Torque only (no force)
+
+        # Return a bunch of things.
+        return (state,      # Updated state (none)
+                nothing,    # Outputs
+                inputs_bus, # Updated inputs bus
+                true)       # Active
+
+    end
+    
+    # Create the default set of constants needed by the controller.
+    constants = REUCPITLConstants(
+        UDPConnection(ip"192.168.1.3", 2000, 2001),
+        REUCConstants([0.; 0.; 0.; 1.], 0.25, 0.5, 2., 10., 5.))
+
+    # Create the model.
+    DynamicalModel("controller",
+                   startup = startup,
+                   shutdown = shutdown,
+                   init = step,
+                   update = step,
+                   constants = constants,
+                   timing = ModelTiming(0.05))
+
+end # PITL model constructor
 
 end # module
