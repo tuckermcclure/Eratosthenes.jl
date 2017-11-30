@@ -30,7 +30,7 @@ function StarTracker()
     function sense(t, constants, state, draws, inputs, effects, effects_bus)
         errors = constants .* draws
         body, = find_effect(effects, BodyStateEffect())
-        return (state, qcomp(mrp2q(errors), body.q_BI), true)
+        return (state, qcomp(mrp2q(errors, 4.), body.q_BI), true)
     end
     DynamicalModel("default_star_tracker",
                    init = sense,

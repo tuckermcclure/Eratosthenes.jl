@@ -2,6 +2,10 @@ mutable struct BodyConstants{T <: Real}
     m::T # Mass
     I_B::Matrix{T} # Central mass moment of inertia in body coordinates
     r_mb_B::Vector{T} # Position of center of mass wrt body reference point in body coordinates
+    Δr::Vector{T} # Random position perturbations (m) (for initialization)
+    Δv::Vector{T} # Random velocity perturbations (m/s)
+    Δq::Vector{T} # Random orientation perturbations (~rad)
+    Δω::Vector{T} # Random rotation rate perturbations (rad/s)
 end
 
 mutable struct BodyState{T} <: ModelState where {T <: Real}
@@ -15,6 +19,16 @@ end
 Create a DynamicalModel configured to act like a rigid body.
 """
 function Body()
+
+    # Upon initialization, Bodies can perturb their nominal states
+    # by the specified amount (defaults to 0).
+    function init(t, constants, state, draws)
+        state.r_be_I += constants.Δr .* draws[1:3]
+        state.v_be_I += constants.Δv .* draws[4:6]
+        state.q_BI   =  qcomp(mrp2q(constants.Δq .* draws[7:9], 4.), state.q_BI)
+        state.ω_BI_B += constants.Δω .* draws[10:12]
+        return state
+    end
 
     # Bodies are the top-lever dynamical objects; they produce effects for
     # others to consume and will see all of the effects of others in their
@@ -70,16 +84,22 @@ function Body()
 
     end
 
+    # Create the set of constants used by the rigid body.
+    constants = BodyConstants(50., 5.*eye(3), zeros(3), 
+                              zeros(3), zeros(3), zeros(3), zeros(3))
+
     DynamicalModel(
         "body",
+        init = init,
         effects = effects,
         derivatives = derivatives,
         timing = ModelTiming(0.01),    # maximum-allowable time step
-        constants = BodyConstants(50., 5.*eye(3), [0., 0., 0.]),
+        constants = constants,
         state = BodyState([6378137., 0., 0.], # position
                           [0., 7600., 0.],    # velocity
                           [0., 0., 0., 1.],   # attitude
-                          [0., 0., 0.]))      # rotation rate
+                          [0., 0., 0.]),      # rotation rate
+        rand = RandSpec(init=12)) # We need 3 Gaussian draws for the init fcn.
 end
 
 mutable struct Vehicle

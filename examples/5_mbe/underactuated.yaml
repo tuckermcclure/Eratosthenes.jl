@@ -1,0 +1,41 @@
+sim:
+  dt: 0.05 # Timestep for RK4 for continuous-time states (s)
+  t_end: 120. # End time of simulation (it starts at 0) (s)
+  seed: 1 # Seed for top-level random number generator
+  date_0: [2017, 11, 16, 10, 41, 0.] # Simulation start date (UT1)
+  log_file: out/underactuated.h5
+environment:
+  model: LowEarthOrbit
+vehicles:
+  - model: Vehicle # Generic rigid body with inertial state
+    name: smallsat
+    body: # No need to specify the model; the default body will do for us.
+      constants:
+        m: 50. # Mass of the body (kg)
+        I_B: [[5., 0., 0.],
+              [0., 5., 0.],
+              [0., 0., 4.]] # Central mass moment of inertia of the body (kg m^2)
+      state:
+        r_be_I: "[6378137.+350000., 0., 0.]" # Position of reference point b wrt COM of Earth in ICRF (m)
+        v_be_I: "7600. * [0; cos(pi/4); sin(pi/4)]" # Rate of change of above (m/s)
+        q_BI:   "normalize([0.1; -0.1; 0.5; 0.3])" # Orientation of body wrt ICRF
+        ω_BI_B: [0., 0., 0.] # Rotation rate of body wrt ICRF, expressed in body (rad/s)
+    components: # Low-level stuff, like sensors and actuators; these run "before" software on common timesteps.
+      - model: TruthSensor # For this paper, we don't care about sensors/state estimators; measure truth directly.
+        name: truth_sensor
+        timing: { dt: 0.05 } # Sample rate for sensor
+      - model: IdealActuator # Similarly, we don't care about actuator dynamics; this actuator just produces the commanded torque.
+        name: ideal_actuator
+        timing: { dt: 0.05 } # Sample rate for actuator
+    computers: # These are more sophisticated and can run multiple processes at various rates.
+      - model: Computer # Generic flight computer; just runs its softwares
+        software:
+          - model: ReducedEffortUnderactuatedController
+            constants:
+              q_TI: [0., 0., 0., 1.] # Target orientation
+              κc: 0.125 # Maximum gain to drive down w
+              μc: 0.25  # Maximum gain to drive down z
+              ρ:  2.    # Gain shaping parameter
+              α:  4.    # Rotation rate tracking gain
+              I:  5.    # Moment of inertia for x (or y -- they're the same for a body axisymmetric about z)
+            timing: { dt: 0.05 } # Sample rate for controller (s)
