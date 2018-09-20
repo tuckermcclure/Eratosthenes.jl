@@ -63,7 +63,7 @@ end
 
 function Gyro()
     function init(t, constants, state, draws, inputs, effects, effects_bus)
-        initial_bias = constants.initial_bias_magnitude * (2. * draws[1:3] - 1.)
+        initial_bias = constants.initial_bias_magnitude * (2. .* draws[1:3] .- 1.)
         body, = find_effect(effects, BodyStateEffect())
         return (GyroState(initial_bias, body.q_BI, t),
                 body.ω_BI_B, # Outputs

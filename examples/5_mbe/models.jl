@@ -33,39 +33,39 @@ end
 
 # Create the rate control law.
 function rate_controller(I, κc, μc, ρ, α, q_TI, q_BI, ω_BI_B)
-    
+
     # Parameterize the rotation rate. Note that ω_BI_B[3] is presumed to be 0.
     ω = ω_BI_B[1] + im * ω_BI_B[2]
 
     # Turn the target orientation quaternion and current orientation into
     # the z-w parameters. This comes from:
-    # 
+    #
     # Tsiotras, P., and Longuski, J. M., “A New Parameterization of the
     # Attitude Kinematics,” Journal of the Astronautical Sciences, Vol. 43,
-    # No. 3, 1995, pp. 243–262. 
-    # 
-    # Note that this parameterization fails for the "upside down" case. We can 
+    # No. 3, 1995, pp. 243–262.
+    #
+    # Note that this parameterization fails for the "upside down" case. We can
     # deal with that later in the development.
     q  = qdiff(q_BI, q_TI)
     z  = 2 * atan2(q[3], q[4]) # 2 * atan(q[3]/q[4])
     w1 = (q[2] * q[3] + q[4] * q[1]) / (q[4]^2 + q[3]^2)
     w2 = (q[4] * q[2] - q[1] * q[3]) / (q[4]^2 + q[3]^2)
     w  = w1 + im * w2
-    
+
     # And calculate its rate of change (Eq. 13a).
     w_dot = 0.5 * ω + 0.5 * conj(ω) * w^2
 
-    # Form the ratio that separates the phase space into good and bad 
+    # Form the ratio that separates the phase space into good and bad
     # regions (Eq. 17).
     v = real(w*conj(w))
     η = z / v
 
-    # Form the gains (Eq. 21a and b). These "destabilize" when in the bad 
+    # Form the gains (Eq. 21a and b). These "destabilize" when in the bad
     # region and drive the system to equilibrium when in the good regions.
     temp = atan(ρ * (1 - η^2))
     κ = 2. * κc / π * temp
     μ = μc / π * temp + 0.5 * μc
-    
+
     # Form the desired rate (Eq. 19).
     ω_d = -κ * w - im * μ * (z/conj(w))
 
@@ -82,7 +82,7 @@ function rate_controller(I, κc, μc, ρ, α, q_TI, q_BI, ω_BI_B)
     μ_dot = -2 * μc / π * temp
 
     # Calculate the rate of change of the desired rate (Eq. 36).
-    ω_d_dot = (-κ_dot * w - κ * w_dot - im * μ_dot * η * w 
+    ω_d_dot = (-κ_dot * w - κ * w_dot - im * μ_dot * η * w
                - im * μ * η_dot * w - im * μ * η * w_dot)
 
     # Create the feedback control torque (Eq. 41).
@@ -110,12 +110,12 @@ function ReducedEffortUnderactuatedController()
         q_BI   = outputs_bus["truth_sensor"].q_BI
 
         # Run the controller.
-        τ_B = rate_controller(constants.I, 
-                              constants.κc, 
-                              constants.μc, 
-                              constants.ρ, 
-                              constants.α, 
-                              constants.q_TI, 
+        τ_B = rate_controller(constants.I,
+                              constants.κc,
+                              constants.μc,
+                              constants.ρ,
+                              constants.α,
+                              constants.q_TI,
                               q_BI, ω_BI_B)
 
         # Send the torque command to the actuators.
@@ -128,7 +128,7 @@ function ReducedEffortUnderactuatedController()
                 true)       # Active
 
     end
-    
+
     # Create the default set of constants needed by the controller.
     constants = REUCConstants([0.; 0.; 0.; 1.], 0.25, 0.5, 2., 10., 5.)
 
@@ -146,19 +146,19 @@ end # model constructor
 ########################
 
 # We've implemented a new model to run the C implementation. We could instead
-# have used the model about and added an option to the constants for which 
+# have used the model about and added an option to the constants for which
 # version to run (Julia, SITL, PITL), but that would make the basic model
 # more difficult to read. To keep it simple for the sake of this demo, we've
 # opted to take the approach of keeping SITL and PITL as separate models, at
 # the expense of a little redundant code.
-# 
+#
 # The C implementation is in reuc.c. See that file for build details.
 
 # Create the constants for SITL, which include the normal parameters as well
 # as the C library to call.
 mutable struct REUCSITLConstants
-    c_lib::Ptr{Void} # Points to library
-    c_fcn::Ptr{Void} # Points to function in library
+    c_lib::Ptr{Cvoid} # Points to library
+    c_fcn::Ptr{Cvoid} # Points to function in library
     parameters::REUCConstants # Normal parameters
 end
 
@@ -195,14 +195,14 @@ function ReducedEffortUnderactuatedControllerSITL()
         # Run the controller.
         τ_B = [0.; 0.; 0.]
         ccall(constants.c_fcn, # Function to call
-              Void, # No return value
+              Nothing, # No return value
               # Function interface:
               (Float64, Float64, Float64, Float64, Float64, # Parameters
                Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, # Quaternions and rate
                Ptr{Float64}), # Output torque
               # Actual values to pass:
               constants.parameters.I, constants.parameters.κc, constants.parameters.μc,
-              constants.parameters.ρ, constants.parameters.α, 
+              constants.parameters.ρ, constants.parameters.α,
               constants.parameters.q_TI, q_BI, ω_BI_B,
               τ_B)
 
@@ -216,11 +216,11 @@ function ReducedEffortUnderactuatedControllerSITL()
                 true)       # Active
 
     end
-    
+
     # Create the default set of constants needed by the controller.
     constants = REUCSITLConstants(
-        Ptr{Void}(0), # C lib
-        Ptr{Void}(0), # C function
+        Ptr{Cvoid}(0), # C lib
+        Ptr{Cvoid}(0), # C function
         REUCConstants([0.; 0.; 0.; 1.], 0.25, 0.5, 2., 10., 5.))
 
     # Create the model.
@@ -277,9 +277,9 @@ function ReducedEffortUnderactuatedControllerPITL()
         q_BI   = outputs_bus["truth_sensor"].q_BI
 
         # Run the controller.
-        udp_send(constants.conn, 1, 
+        udp_send(constants.conn, 1,
             constants.parameters.I, constants.parameters.κc, constants.parameters.μc,
-            constants.parameters.ρ, constants.parameters.α, 
+            constants.parameters.ρ, constants.parameters.α,
             constants.parameters.q_TI, q_BI, ω_BI_B)
         sleep(0.001)
         τ_B_tuple = (0., 0., 0.)
@@ -296,7 +296,7 @@ function ReducedEffortUnderactuatedControllerPITL()
                 true)       # Active
 
     end
-    
+
     # Create the default set of constants needed by the controller.
     constants = REUCPITLConstants(
         UDPConnection(ip"192.168.1.3", 2000, 2001),

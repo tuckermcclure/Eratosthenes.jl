@@ -16,7 +16,7 @@ vehicles:
               [0., 5., 0.],
               [0., 0., 4.]] # Central mass moment of inertia of the body (kg m^2)
       state:
-        r_be_I: "[6378137.+350000., 0., 0.]" # Position of reference point b wrt COM of Earth in ICRF (m)
+        r_be_I: "[6378137 .+ 350000., 0., 0.]" # Position of reference point b wrt COM of Earth in ICRF (m)
         v_be_I: "7600. * [0; cos(pi/4); sin(pi/4)]" # Rate of change of above (m/s)
         q_BI:   "normalize([0.1; -0.1; 0.5; 0.3])" # Orientation of body wrt ICRF
         ω_BI_B: [0., 0., 0.] # Rotation rate of body wrt ICRF, expressed in body (rad/s)

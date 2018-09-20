@@ -30,13 +30,13 @@ mutable struct StarTrackerAndGyroControllerConstants
     target::Vector{Float64}
     mode::StarTrackerAndGyroControllerMode
     conn::UDPConnection
-    c_lib::Ptr{Void}
-    c_fcn::Ptr{Void}
+    c_lib::Ptr{Cvoid}
+    c_fcn::Ptr{Cvoid}
     StarTrackerAndGyroControllerConstants(target = [0.; 0.; 0.; 1.],
                                           mode   = jitl,
                                           conn   = UDPConnection(),
-                                          c_lib  = Ptr{Void}(0),
-                                          c_fcn  = Ptr{Void}(0)) =
+                                          c_lib  = Ptr{Cvoid}(0),
+                                          c_fcn  = Ptr{Cvoid}(0)) =
         new(target, mode, conn, c_lib, c_fcn)
 end
 
@@ -93,7 +93,7 @@ function StarTrackerAndGyroController()
             f_B   = [0.; 0.; 0.]
             τ_B   = [0.; 0.; 0.]
             ccall(constants.c_fcn,
-                  Void,
+                  Nothing,
                   (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}),
                   gains, q_TI, q_BI, ω_BI_B, f_B, τ_B);
 

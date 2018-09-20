@@ -10,6 +10,7 @@ module MBEDemoCTest
 
 # Use/import the modules we'll need.
 using ..MBEModels  # The MBEModels module included above (and "above" this module)
+using Random
 
 # Set some constants (we could randomize these too...).
 I  = 5.
@@ -31,7 +32,7 @@ try
     Δτ = zeros(2, n)
 
     # Seed the random number generator so that this test is repeatable.
-    srand(1)
+    Random.seed!(1)
 
     for k = 1:n
 
@@ -46,19 +47,19 @@ try
         # Run the C implementation.
         τ_B_c = [0.; 0.; 0.]
         ccall(c_fcn, # Function to call
-            Void, # No return value
+            Nothing, # No return value
             # Function interface:
             (Float64, Float64, Float64, Float64, Float64, # Parameters
             Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, # Quaternions and rate
             Ptr{Float64}), # Output torque
             # Actual values to pass:
-            I, κc, μc, ρ, α, 
+            I, κc, μc, ρ, α,
             q_TI, q_BI, ω_BI_B,
             τ_B_c)
 
-        # Store the differences.    
+        # Store the differences.
         Δτ[:,k] = τ_B[1:2] - τ_B_c[1:2]
-        
+
     end
 
     display(Δτ)

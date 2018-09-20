@@ -13,7 +13,10 @@ simulate(scenario)
 module Eratosthenes
 
 import Base: convert, +, *, accumulate! # Required in order to extend these things.
+import Base.Meta: parse
 using Base.Iterators
+using Random
+using LinearAlgebra
 import YAML
 using HDF5Logger
 

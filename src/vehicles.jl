@@ -8,7 +8,7 @@ mutable struct BodyConstants{T <: Real}
     Δω::Vector{T} # Random rotation rate perturbations (rad/s)
 end
 
-mutable struct BodyState{T} <: ModelState where {T <: Real}
+mutable struct BodyState{T <: Real} <: ModelState
     r_be_I::Vector{T} # Position of center of mass wrt center of mass of earth in ICRF's coordinates
     v_be_I::Vector{T} # Rate of change of above (as viewed from the inertia frame)
     q_BI::Vector{T}   # Attitude quaternion of body frame wrt ICRF
@@ -85,7 +85,7 @@ function Body()
     end
 
     # Create the set of constants used by the rigid body.
-    constants = BodyConstants(50., 5.*eye(3), zeros(3), 
+    constants = BodyConstants(50., Matrix(Diagonal([5.0; 5; 5])), zeros(3),
                               zeros(3), zeros(3), zeros(3), zeros(3))
 
     DynamicalModel(
@@ -110,6 +110,6 @@ mutable struct Vehicle
     Vehicle(name, body, components, computers) = new(name, body, components, computers)
     Vehicle() = Vehicle("default_vehicle",
                         Body(),
-                        Vector{DynamicalModel}(0),
-                        Vector{Computer}(0))
+                        Vector{DynamicalModel}(undef, 0),
+                        Vector{Computer}(undef, 0))
 end

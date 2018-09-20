@@ -18,22 +18,22 @@ mutable struct RandSpec{R}
         new{R}(rng, seed, init, effects, derivatives, update)
 end
 
-# convert(::Type{RandSource}, ::Void) = RandSource(n=0)
+# convert(::Type{RandSource}, ::Nothing) = RandSource(n=0)
 convert(::Type{RandSource}, n::Int64) = RandSource(n=n)
 
-# convert(::Type{MultiRandSource}, ::Void) = (Vector{RandSource}(), true)
+# convert(::Type{MultiRandSource}, ::Nothing) = (Vector{RandSource}(), true)
 convert(::Type{MultiRandSource}, r::RandSource) = ((r,), true)
 convert(::Type{MultiRandSource}, n::Int64) = (n > 0 ? (RandSource(n=n),) : (), true)
 convert(::Type{MultiRandSource}, t::Tuple{Function, Int64}) = ((RandSource(t...),), true)
 convert(::Type{MultiRandSource}, vt::Vector{T}) where {T<:Tuple{Function, Int64}} = (collect(RandSource(t...) for t in vt), false)
 
-convert(::Type{RandSpec}, ::Void) = RandSpec()
+convert(::Type{RandSpec}, ::Nothing) = RandSpec()
 
 function seed(r::RandSpec, force_seed::Bool = false)
     if force_seed || r.seed < 0
-        srand(r.rng, rand(1:1000000))
+        Random.seed!(r.rng, rand(1:1000000))
     else
-        srand(r.rng, r.seed)
+        Random.seed!(r.rng, r.seed)
     end
 end
 

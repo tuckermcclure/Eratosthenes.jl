@@ -7,7 +7,7 @@ setup(file_name::String) = setup(Scenario(), file_name);
 setup(specs::Dict)       = setup(Scenario(), specs);
 
 # Create a function to turn a JSON file name into a dictionary and then load that dictionary.
-function setup(model, file_name::String, context::Module = current_module())
+function setup(model, file_name::String, context::Module = @__MODULE__)
     println("Loading scenario specifications from '$file_name' in $context.")
     # The `do` pattern here take care of closing the file if anything goes wrong.
     if endswith(lowercase(file_name), ".json")
@@ -24,7 +24,7 @@ function setup(model, file_name::String, context::Module = current_module())
 end
 
 # setup fields matching keys with values from the dictionary.
-function setup(model, specs::Dict, context::Module = current_module(), spacing::String = "")
+function setup(model, specs::Dict, context::Module = @__MODULE__, spacing::String = "")
 
     # If this requires that we put in a new model, do so now. Afterwards, we'll skip the "model" field.
     if haskey(specs, "model")
@@ -44,7 +44,7 @@ function setup(model, specs::Dict, context::Module = current_module(), spacing::
             end
 
             # We evaluate the expression to give a function, which ought to construct the model.
-            model_constructor = eval(mod, parse(specs["model"]))
+            model_constructor = Core.eval(mod, parse(specs["model"]))
 
             # Run the model constructor without arguments.
             model = model_constructor()
@@ -72,7 +72,8 @@ function setup(model, specs::Dict, context::Module = current_module(), spacing::
     for (key, value) in specs
 
         # Skip descriptions and model specs.
-        if contains(==, ["description", "model"], lowercase(key))
+        # if contains(==, ["description", "model"], lowercase(key))
+        if any((y->begin ==(y, lowercase(key)) end), ["description", "model"])
             continue
         end
 
@@ -96,7 +97,7 @@ function setup(model, specs::Dict, context::Module = current_module(), spacing::
 
                 println(spacing, "$field is a vector ($(typeof(getfield(model, field))))!")
 
-                x = Vector{eltype(getfield(model, field))}(length(value))
+                x = Vector{eltype(getfield(model, field))}(undef, length(value))
                 for k = 1:length(value)
                     # try # We put the try here so that the whole assignment gets skipped.
                         x[k] = setup(nothing, value[k], context, spacing * "  ")
@@ -121,7 +122,7 @@ function setup(model, specs::Dict, context::Module = current_module(), spacing::
             elseif isa(getfield(model, field), Function) && isa(value, AbstractString)
 
                 println("Trying to interpret the function: $value")
-                converted = eval(context, parse(value))
+                converted = Core.eval(context, parse(value))
                 setfield!(model, field, converted)
 
             # Otherwise, it's presumed to be a "shallow" type.
@@ -162,7 +163,7 @@ function convert_it(context, target, value, spacing)
 
     # Otherwise, if there's a conversion from the source type to the target
     # type, use it.
-    elseif method_exists(convert, Tuple{Type{target_type}, source_type})
+elseif hasmethod(convert, Tuple{Type{target_type}, source_type})
 
         # Convert the value in the dictionary to the type contained in the
         # struct.
@@ -174,7 +175,7 @@ function convert_it(context, target, value, spacing)
     elseif isa(value, AbstractString)
 
         println("Evaluating $value.")
-        evaluated = eval(context, parse(value))
+        evaluated = Core.eval(context, parse(value))
         converted_value = convert_it(context, target, evaluated, spacing)
 
     # Otherwise, copy it and hope for the best.
