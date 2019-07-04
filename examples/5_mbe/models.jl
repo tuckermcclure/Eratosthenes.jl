@@ -4,6 +4,10 @@ module MBEModels
 # This module will naturally need the types defined in Eratosthenes.
 using Eratosthenes
 
+import Pkg
+using Sockets
+import Libdl
+
 # We'll also use the quaternion stuff that's conveniently included with Eratosthenes.
 include(joinpath(Pkg.dir("Eratosthenes"), "src", "EratosthenesRotations.jl"))
 using .EratosthenesRotations # Only used for qdiff
@@ -47,7 +51,7 @@ function rate_controller(I, κc, μc, ρ, α, q_TI, q_BI, ω_BI_B)
     # Note that this parameterization fails for the "upside down" case. We can
     # deal with that later in the development.
     q  = qdiff(q_BI, q_TI)
-    z  = 2 * atan2(q[3], q[4]) # 2 * atan(q[3]/q[4])
+    z  = 2 * atan(q[3], q[4]) # 2 * atan(q[3]/q[4])
     w1 = (q[2] * q[3] + q[4] * q[1]) / (q[4]^2 + q[3]^2)
     w2 = (q[4] * q[2] - q[1] * q[3]) / (q[4]^2 + q[3]^2)
     w  = w1 + im * w2
@@ -157,8 +161,8 @@ end # model constructor
 # Create the constants for SITL, which include the normal parameters as well
 # as the C library to call.
 mutable struct REUCSITLConstants
-    c_lib::Ptr{CNothing} # Points to library
-    c_fcn::Ptr{CNothing} # Points to function in library
+    c_lib::Ptr{Cvoid} # Points to library
+    c_fcn::Ptr{Cvoid} # Points to function in library
     parameters::REUCConstants # Normal parameters
 end
 
@@ -219,8 +223,8 @@ function ReducedEffortUnderactuatedControllerSITL()
 
     # Create the default set of constants needed by the controller.
     constants = REUCSITLConstants(
-        Ptr{CNothing}(0), # C lib
-        Ptr{CNothing}(0), # C function
+        Ptr{Cvoid}(0), # C lib
+        Ptr{Cvoid}(0), # C function
         REUCConstants([0.; 0.; 0.; 1.], 0.25, 0.5, 2., 10., 5.))
 
     # Create the model.

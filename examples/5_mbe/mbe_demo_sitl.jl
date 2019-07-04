@@ -18,6 +18,7 @@ using ..MBEModels  # The MBEModels module included above (and "above" this modul
 import YAML        # For loading the YAML file directly
 import HDF5        # For loading the log file
 using Plots        # For plotting our results
+using LinearAlgebra
 
 # Create a directory for the log file.
 if !isdir("out"); mkdir("out"); end
@@ -41,7 +42,7 @@ yaml["vehicles"][1]["computers"][1]["software"][1]["constants"] = Dict(
 );
 
 # Set up the senario and run it.
-scenario = setup(yaml)
+scenario = setup(Scenario(), yaml, @__MODULE__)
 scenario = simulate(scenario)
 
 #########
@@ -56,7 +57,8 @@ t, q_BI, ω_BI_B = HDF5.h5open(scenario.sim.log_file, "r") do logs
 end
 
 # Choose a friendly plotting package.
-plotlyjs()
+pyplot()
+# plotlyjs()
 
 # Define each plot that we'll need.
 display(plot(t, transpose(q_BI),
@@ -73,12 +75,13 @@ display(plot(t, 180/π * transpose(ω_BI_B),
     (read(logs, "/smallsat/body/state/data/q_BI"),
      read(logs, "/smallsat/body/state/data/ω_BI_B"))
 end
+
 display(plot(t, transpose(q_BI) - transpose(q_BI_baseline),
     label  = ["q1" "q2" "q3" "q4"],
     xlabel = "Time (s)",
     ylabel = "Quaternion Differences",
     title  = "Differences in Attitude Quaternions"))
-display(plot(t, 180/π * transpose((ω_BI_B) - transpose(ω_BI_B_baseline)),
+display(plot(t, 180/π * (transpose(ω_BI_B) - transpose(ω_BI_B_baseline)),
     label  = ["ω1" "ω2" "ω3"],
     xlabel = "Time (s)",
     ylabel = "Rate (deg/s)",
