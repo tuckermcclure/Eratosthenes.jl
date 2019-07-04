@@ -7,6 +7,7 @@ using Eratosthenes # Bring in the top-level sim environment.
 using Plots # For plotting (Pkg.add("Plots"); Pkg.add("PyPlot");)
 import HDF5 # For loading the log file (Pkg.add("HDF5");)
 import Juno # For the progress bar
+using LinearAlgebra
 
 # Include a module that's not part of Eratosthenes itself. Anything we "use"
 # here will be visible during the setup portion of the scenario. So we can
@@ -15,11 +16,13 @@ include(joinpath("..", "EratosthenesExampleSoftware.jl"))
 using .EratosthenesExampleSoftware
 
 # Create the hierarchy of objects used by the sim.
-scenario = setup("scenarios/basic-cube.yaml")
+scenario = setup(Scenario(), "scenarios/basic-cube.yaml", @__MODULE__)
+
+display(scenario)
 
 # Set up SITL.
 scenario.sim.log_file = "out/basic-cube-sitl.h5"
-scenario.vehicles[1].software[1].constants.mode = EratosthenesExampleSoftware.sitl
+scenario.vehicles[1].computers[1].software[1].constants.mode = EratosthenesExampleSoftware.sitl
 
 # Create a Juno waitbar. This do-block syntax makes sure it gets "closed" even
 # if there's an error.
@@ -28,8 +31,8 @@ Juno.progress(name="Simulating...") do progress_bar
     # Run the simulation. Anything inside this do-block will be run at the
     # beginning of every major time step. This is useful for updating a progress
     # bar or a plot.
-    simulate(scenario) do fraction
-        Juno.progress(progress_bar, fraction) # Update Juno's progress bar.
+    simulate(scenario) do k, n
+        @info "iterating" progress=k/n _id=progress_bar # Update Juno's progress bar.
         return true # Return false to end the sim.
     end
 
@@ -42,9 +45,9 @@ if !isempty(scenario.sim.log_file)
     # error-handling, so we can just read whatever we want and return it.
     t, q_BI, ω_BI_B =
         HDF5.h5open(scenario.sim.log_file, "r") do logs
-            (read(logs, "/cube1/truth/time"),
-             read(logs, "/cube1/truth/data/q_BI"),
-             read(logs, "/cube1/truth/data/ω_BI_B"))
+            (read(logs, "/cube1/body/state/time"),
+             read(logs, "/cube1/body/state/data/q_BI"),
+             read(logs, "/cube1/body/state/data/ω_BI_B"))
         end
 
     # Scalars are logged as 1-by-n (don't know why). Convert to just n for

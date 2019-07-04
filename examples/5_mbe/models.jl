@@ -169,7 +169,7 @@ function ReducedEffortUnderactuatedControllerSITL()
     # This function gets called when the simulation is starting up. It's
     # a good place to load the C library.
     function startup(t, constants, state)
-        if is_windows()
+        if Sys.iswindows()
             constants.c_lib = Libdl.dlopen("windows/lib-reuc.dll")
         else
             constants.c_lib = Libdl.dlopen("linux/lib-reuc.so")

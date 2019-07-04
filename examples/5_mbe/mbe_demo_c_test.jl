@@ -11,6 +11,7 @@ module MBEDemoCTest
 # Use/import the modules we'll need.
 using ..MBEModels  # The MBEModels module included above (and "above" this module)
 using Random
+import Libdl
 
 # Set some constants (we could randomize these too...).
 I  = 5.

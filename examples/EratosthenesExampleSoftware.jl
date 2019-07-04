@@ -11,6 +11,7 @@ include(joinpath("utilities", "UDPConnections.jl"))
 using .UDPConnections
 
 using Sockets
+import Libdl
 
 # Let anyone use this controller.
 export StarTrackerAndGyroController
@@ -57,7 +58,7 @@ function StarTrackerAndGyroController()
     # This function always runs before the simulation starts up.
     function startup(t, constants, state, args...)
         if constants.mode == sitl
-            if is_windows()
+            if Sys.iswindows()
                 constants.c_lib = Libdl.dlopen("3_c_code/windows/lib-pd-controller.dll")
             else
                 constants.c_lib = Libdl.dlopen("3_c_code/linux/lib-pd-controller.so")
