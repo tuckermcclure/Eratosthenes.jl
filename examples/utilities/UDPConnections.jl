@@ -2,6 +2,8 @@ module UDPConnections
 
 export UDPConnection, udp_connect, udp_send, udp_receive, udp_close
 
+using Sockets
+
 mutable struct UDPConnection
     sock::UDPSocket
     target_ip::IPv4

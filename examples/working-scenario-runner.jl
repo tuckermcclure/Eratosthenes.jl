@@ -84,8 +84,8 @@ if !isempty(scenario.sim.log_file)
     # Scalars are logged as 1-by-n (don't know why). Convert to just n for
     # the sake of plotting.
     t      = dropdims(t, dims=1)
-    #t_st   = squeeze(t_st, 1)
-    #t_gyro = squeeze(t_gyro, 1)
+    #t_st   = dropdims(t_st, dims=1)
+    #t_gyro = dropdims(t_gyro, dims=1)
 
     # Choose a friendly plotting package.
     # pyplot()
@@ -110,27 +110,27 @@ if !isempty(scenario.sim.log_file)
                  ylabel = "Wheel Rate (RPM)"))
 
     # # For coupled reaction wheels:
-    # display(plot(t, 30/π*(rw1 - ω_BI_B).',
+    # display(plot(t, 30/π*(rw1 - transpose(ω_BI_B)),
     #              xlabel = "Time (s)",
     #              ylabel = "RW1 Rate (RPM)"))
-    # display(plot(t, 30/π*(rw1 - ω_BI_B).',
+    # display(plot(t, 30/π*(rw1 - transpose(ω_BI_B)),
     #              xlabel = "Time (s)",
     #              ylabel = "RW1 Rate (RPM)")) # I need two of this plot to get it plotted once??
-    # display(plot(t, 30/π*([0. -1. 0.; 1. 0. 0.; 0. 0. 1.] * rw2 - ω_BI_B).',
+    # display(plot(t, 30/π*([0. -1. 0.; 1. 0. 0.; 0. 0. 1.] * rw2 - transpose(ω_BI_B)),
     #              xlabel = "Time (s)",
     #              ylabel = "RW2 Rate (RPM)"))
-    # display(plot(t, 30/π*([0. 0. -1.; 0. 1. 0.; 1. 0. 0.] * rw3 - ω_BI_B).',
+    # display(plot(t, 30/π*([0. 0. -1.; 0. 1. 0.; 1. 0. 0.] * rw3 - transpose(ω_BI_B)),
     #              xlabel = "Time (s)",
     #              ylabel = "RW3 Rate (RPM)"))
 
     # # For simple reaction wheels:
-    # display(plot(t, 30/π*squeeze(rw1,1),
+    # display(plot(t, 30/π*dropdims(rw1,dims=1),
     #              xlabel = "Time (s)",
     #              ylabel = "RW1 Rate (RPM)"))
-    # display(plot(t, 30/π*squeeze(rw2,1),
+    # display(plot(t, 30/π*dropdims(rw2,dims=1),
     #              xlabel = "Time (s)",
     #              ylabel = "RW2 Rate (RPM)"))
-    # display(plot(t, 30/π*squeeze(rw3,1),
+    # display(plot(t, 30/π*dropdims(rw3,dims=1),
     #              xlabel = "Time (s)",
     #              ylabel = "RW3 Rate (RPM)"))
 

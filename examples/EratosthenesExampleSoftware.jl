@@ -10,6 +10,8 @@ using .EratosthenesRotations
 include(joinpath("utilities", "UDPConnections.jl"))
 using .UDPConnections
 
+using Sockets
+
 # Let anyone use this controller.
 export StarTrackerAndGyroController
 

@@ -157,8 +157,8 @@ end # model constructor
 # Create the constants for SITL, which include the normal parameters as well
 # as the C library to call.
 mutable struct REUCSITLConstants
-    c_lib::Ptr{Cvoid} # Points to library
-    c_fcn::Ptr{Cvoid} # Points to function in library
+    c_lib::Ptr{CNothing} # Points to library
+    c_fcn::Ptr{CNothing} # Points to function in library
     parameters::REUCConstants # Normal parameters
 end
 
@@ -219,8 +219,8 @@ function ReducedEffortUnderactuatedControllerSITL()
 
     # Create the default set of constants needed by the controller.
     constants = REUCSITLConstants(
-        Ptr{Cvoid}(0), # C lib
-        Ptr{Cvoid}(0), # C function
+        Ptr{CNothing}(0), # C lib
+        Ptr{CNothing}(0), # C function
         REUCConstants([0.; 0.; 0.; 1.], 0.25, 0.5, 2., 10., 5.))
 
     # Create the model.

@@ -39,18 +39,18 @@ if !isempty(scenario.sim.log_file)
 
     # Scalars are logged as 1-by-n (don't know why). Convert to just n for
     # the sake of plotting.
-    t = squeeze(t, 1)
+    t = dropdims(t, dims=1)
 
     # Choose a friendly plotting package. PyPlot behaves nicely.
     # pyplot()
     plotlyjs()
 
     # Define each plot that we'll need.
-    display(plot(t, q_BI.',
+    display(plot(t, transpose(q_BI),
                  label  = ["q1" "q2" "q3" "q4"],
                  xlabel = "Time (s)",
                  ylabel = "Attitude Quaternion"))
-    display(plot(t, 180/π * ω_BI_B.',
+    display(plot(t, 180/π * transpose(ω_BI_B),
                  label  = ["ω1" "ω2" "ω3"],
                  xlabel = "Time (s)",
                  ylabel = "Rotation Rate (deg/s)"))

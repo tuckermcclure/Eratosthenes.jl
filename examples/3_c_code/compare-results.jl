@@ -29,9 +29,9 @@ end
 
 # Scalars are logged as 1-by-n (don't know why). Convert to just n for
 # the sake of plotting.
-t      = squeeze(t, 1)
-t_sitl = squeeze(t_sitl, 1)
-t_pitl = squeeze(t_pitl, 1)
+t      = dropdims(t, dims=1)
+t_sitl = dropdims(t_sitl, dims=1)
+t_pitl = dropdims(t_pitl, dims=1)
 
 # Compare the literal values in the quaternion (not the underlying rotation);
 # they should be identical.
@@ -53,7 +53,7 @@ display(maximum(θ_pitl_wrt_sitl) * 180/pi)
 # Show the divergence.
 # pyplot()
 plotlyjs()
-# display(plot(t, Δq.',
+# display(plot(t, transpose(Δq),
 #              label  = ["Δq1" "Δq2" "Δq3" "Δq4"],
 #              ylabel = "Δq"))
 display(plot(t, θ_pitl * (180./pi * 3600.),

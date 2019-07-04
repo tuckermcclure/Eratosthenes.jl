@@ -34,14 +34,21 @@ function setup(model, specs::Dict, context::Module = @__MODULE__, spacing::Strin
         try
 
             # Turn the model text into an expression.
+            println("Turning ", specs["model"], " into an expression.")
             model_expr = parse(specs["model"])
+            display(model_expr)
+
+            display(context)
 
             # Find the right place to evaluate this thing.
             if isa(model_expr, Symbol) && !isdefined(context, model_expr)
+                println("This branch.")
                 mod = Eratosthenes
             else
+                println("That branch.")
                 mod = context
             end
+            println("Evaluating expression in ", mod)
 
             # We evaluate the expression to give a function, which ought to construct the model.
             model_constructor = Core.eval(mod, parse(specs["model"]))
@@ -53,7 +60,7 @@ function setup(model, specs::Dict, context::Module = @__MODULE__, spacing::Strin
 
         catch err
             if isa(err, UndefVarError)
-                println(spacing, "Model creation (", specs["model"], ") failed.")
+                println(spacing, "Model creation (", specs["model"], ") failed.???")
             else
                 rethrow(err)
             end

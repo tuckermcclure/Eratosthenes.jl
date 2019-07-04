@@ -766,7 +766,7 @@ function calculate_time_steps(scenario)
             end
 
             # Now add on the discrete step. (Doing this allows the step to occur
-            # right at count * dt and avoids the accumulation of roundoff error over
+            # right at count * dt and aNothings the accumulation of roundoff error over
             # time.
             t = tn
             push!(ts, t)

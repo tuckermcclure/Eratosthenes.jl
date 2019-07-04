@@ -16,7 +16,7 @@
 
 #include "reuc.h"
 
-int main(void)
+int main(Nothing)
 {
     /* UDP communication stuff */
     UDPHelper comms;

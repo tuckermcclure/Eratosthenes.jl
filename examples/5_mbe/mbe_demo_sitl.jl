@@ -50,7 +50,7 @@ scenario = simulate(scenario)
 
 # Read some data from the logs.
 t, q_BI, ω_BI_B = HDF5.h5open(scenario.sim.log_file, "r") do logs
-    (squeeze(read(logs, "/smallsat/body/state/time"), 1),
+    (dropdims(read(logs, "/smallsat/body/state/time"), dims=1),
      read(logs, "/smallsat/body/state/data/q_BI"),
      read(logs, "/smallsat/body/state/data/ω_BI_B"))
 end
@@ -59,11 +59,11 @@ end
 plotlyjs()
 
 # Define each plot that we'll need.
-display(plot(t, q_BI.',
+display(plot(t, transpose(q_BI),
              label  = ["q1" "q2" "q3" "q4"],
              xlabel = "Time (s)",
              ylabel = "Attitude Quaternion"))
-display(plot(t, 180/π * ω_BI_B.',
+display(plot(t, 180/π * transpose(ω_BI_B),
              label  = ["ω1" "ω2" "ω3"],
              xlabel = "Time (s)",
              ylabel = "Rotation Rate (deg/s)"))
@@ -73,12 +73,12 @@ display(plot(t, 180/π * ω_BI_B.',
     (read(logs, "/smallsat/body/state/data/q_BI"),
      read(logs, "/smallsat/body/state/data/ω_BI_B"))
 end
-display(plot(t, q_BI.' - q_BI_baseline.',
+display(plot(t, transpose(q_BI) - transpose(q_BI_baseline),
     label  = ["q1" "q2" "q3" "q4"],
     xlabel = "Time (s)",
     ylabel = "Quaternion Differences",
     title  = "Differences in Attitude Quaternions"))
-display(plot(t, 180/π * (ω_BI_B.' - ω_BI_B_baseline.'),
+display(plot(t, 180/π * transpose((ω_BI_B) - transpose(ω_BI_B_baseline)),
     label  = ["ω1" "ω2" "ω3"],
     xlabel = "Time (s)",
     ylabel = "Rate (deg/s)",

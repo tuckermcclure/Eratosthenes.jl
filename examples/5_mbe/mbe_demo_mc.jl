@@ -64,7 +64,7 @@ for k = 1:n_runs
     end
     
     # Store the time and quaternions.
-    t = squeeze(t, 1)
+    t = dropdims(t, dims=1)
     q = vcat(q, q_BI)
     
 end
@@ -74,7 +74,7 @@ plotlyjs()
 
 # Show the quaternions from all runs.
 println("Plotting all results.")
-display(plot(t, q.',
+display(plot(t, transpose(q),
     label  = "",
     xlabel = "Time (s)",
     ylabel = "Attitude Quaternions",

@@ -42,19 +42,19 @@ UDPStatus udp_helper(UDPHelper * helper, int listen_port, int target_port, int r
 int udp_receive(UDPHelper * helper);
 
 /* Pull some amount of data out of the read buffer. */
-int udp_pull(UDPHelper * helper, void * data, int length);
+int udp_pull(UDPHelper * helper, Nothing * data, int length);
 
 /* Skip length bytes in the input buffer. */
 int udp_burn(UDPHelper * helper, int length);
 
 /* Put new data into the send buffer. */
-int udp_push(UDPHelper * helper, void * data, int length);
+int udp_push(UDPHelper * helper, Nothing * data, int length);
 
 /* Send the queued packet. */
 int udp_transmit(UDPHelper * helper);
 
 /* Reset the write head. */
-void udp_flush_output(UDPHelper * helper);
+Nothing udp_flush_output(UDPHelper * helper);
 
 /* Close the socket whwen done. */
-void udp_close(UDPHelper * helper);
+Nothing udp_close(UDPHelper * helper);

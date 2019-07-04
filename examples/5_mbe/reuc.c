@@ -17,7 +17,7 @@
 
 double PI = 3.141592653589793;
 
-void qdiff(const double a[4], const double b[4], double c[4])
+Nothing qdiff(const double a[4], const double b[4], double c[4])
 {
     c[0] = -a[3]*b[0] - a[2]*b[1] + a[1]*b[2] + a[0]*b[3];
     c[1] =  a[2]*b[0] - a[3]*b[1] - a[0]*b[2] + a[1]*b[3];
@@ -92,7 +92,7 @@ Complex cmultim(Complex a)
     return c;
 }
 
-EXPORT void reuc(double I, double kappa_c, double mu_c, double rho, double alpha, const double q_TI[4], const double q_BI[4], const double w_BI_B[3], double tau_B[3])
+EXPORT Nothing reuc(double I, double kappa_c, double mu_c, double rho, double alpha, const double q_TI[4], const double q_BI[4], const double w_BI_B[3], double tau_B[3])
 {
     double q[4] = {0., 0., 0., 0.};
     Complex omega = {0., 0.};

@@ -22,6 +22,6 @@ if !isempty(scenario.sim.log_file)
 
     # Scalars are logged as 1-by-n (don't know why). Convert to just n for
     # the sake of plotting.
-    t = squeeze(t, 1)
+    t = dropdims(t, dims=1)
 
 end # plotting
