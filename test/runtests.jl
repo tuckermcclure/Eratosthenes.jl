@@ -1,7 +1,8 @@
 using Eratosthenes
-using Base.Test
+using Test
+using LinearAlgebra
 
-include(Pkg.dir("Eratosthenes") * "/src/EratosthenesRotations.jl")
+include(joinpath(dirname(pathof(Eratosthenes)), "EratosthenesRotations.jl"))
 using .EratosthenesRotations
 
 ########################
@@ -81,7 +82,7 @@ end
 # coupled reaction wheel scenario
 success = false;
 try
-    scenario = setup(joinpath(Pkg.dir("Eratosthenes"), "examples", "scenarios", "reaction-wheel.yaml"))
+    scenario = setup(joinpath(dirname(pathof(Eratosthenes)), "..", "examples", "scenarios", "reaction-wheel.yaml"))
     scenario.sim.t_end = 1.
     simulate(scenario)
     success = true;

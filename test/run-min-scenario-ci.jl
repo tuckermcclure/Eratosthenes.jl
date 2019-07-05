@@ -7,7 +7,7 @@ if !isdir("out")
 end
 
 # Run the sim on the simplest little scenario.
-scenario = simulate(joinpath(Pkg.dir("Eratosthenes"), "examples", "scenarios", "min-scenario.yaml"))
+scenario = simulate(joinpath(dirname(pathof(Eratosthenes)), "..", "examples", "scenarios", "min-scenario.yaml"), @__MODULE__)
 
 # Open the logs and plot some things.
 if !isempty(scenario.sim.log_file)
