@@ -7,6 +7,8 @@ using Eratosthenes # Bring in the top-level sim environment.
 using Plots # For plotting (Pkg.add("Plots"); Pkg.add("PyPlot");)
 import HDF5 # For loading the log file (Pkg.add("HDF5");)
 import Juno # For the progress bar
+using LinearAlgebra
+using Sockets # For ip strings
 
 # Include a module that's not part of Eratosthenes itself. Anything we "use"
 # here will be visible during the setup portion of the scenario. So we can
@@ -19,7 +21,7 @@ scenario = setup("scenarios/basic-cube.yaml")
 
 # Set up PITL.
 scenario.sim.log_file = "out/basic-cube-pitl.h5"
-software_options = scenario.vehicles[1].software[1].constants;
+software_options = scenario.vehicles[1].computers[1].software[1].constants;
 software_options.mode              = EratosthenesExampleSoftware.pitl
 software_options.conn.target_ip    = ip"192.168.1.3"
 software_options.conn.send_port    = 2000
@@ -32,8 +34,8 @@ Juno.progress(name="Simulating...") do progress_bar
     # Run the simulation. Anything inside this do-block will be run at the
     # beginning of every major time step. This is useful for updating a progress
     # bar or a plot.
-    simulate(scenario) do fraction
-        Juno.progress(progress_bar, fraction) # Update Juno's progress bar.
+    simulate(scenario) do k, n
+        @info "iterating" progress=k/n _id=progress_bar # Update Juno's progress bar.
         return true # Return false to end the sim.
     end
 
@@ -57,18 +59,18 @@ if !isempty(scenario.sim.log_file)
 
     # Scalars are logged as 1-by-n (don't know why). Convert to just n for
     # the sake of plotting.
-    t      = squeeze(t, 1)
-    t_st   = squeeze(t_st, 1)
-    t_gyro = squeeze(t_gyro, 1)
+    t      = dropdims(t, dims=1)
+    t_st   = dropdims(t_st, dims=1)
+    t_gyro = dropdims(t_gyro, dims=1)
 
     # Choose a friendly plotting package. PyPlot behaves nicely.
     pyplot()
 
     # Define each plot that we'll need.
-    p1 = plot(t, q_BI.',
+    p1 = plot(t, transpose(q_BI),
               label  = ["q1" "q2" "q3" "q4"],
               ylabel = "Attitude Quaternion")
-    p2 = plot(t, 180/π * ω_BI_B.',
+    p2 = plot(t, 180/π * transpose(ω_BI_B),
               label  = ["ω1" "ω2" "ω3"],
               ylabel = "Rotation Rate (deg/s)")
 

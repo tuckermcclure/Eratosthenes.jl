@@ -28,9 +28,9 @@ end
                 end
             end
         end
-    elseif T <: Void
+    elseif T <: Nothing
         quote
-            # We shouldn't be trying to set a Void. Skip it.
+            # We shouldn't be trying to set a Nothing. Skip it.
             # if k <= 1
             #     # x[k] = v
             #     return 0
@@ -47,7 +47,7 @@ end
                         return 0
                     end
                     k -= 1
-                elseif typeof(x.$f) <: Void # For nothings, we ignore the write.
+                elseif typeof(x.$f) <: Nothing # For nothings, we ignore the write.
                     # if k == 1
                     #     x.$f = nothing
                     #     return 0
@@ -88,7 +88,7 @@ end
             end
             return (0., k-1)
         end
-    elseif T <: Void
+    elseif T <: Nothing
             quote
                 # if k == 1
                 #     return (0., 0)
@@ -157,7 +157,7 @@ stackem(y::T) where {T} = stackem!(Vector{Float64}(), y)
         end
     elseif !isempty(fieldnames(T)) # This is nice; we can't do this with multiple dispatch. Do this for + and * and remove the ModelStates thing?
         Expr(:block, ( :( stackem!(x, y.$f) ) for f in fieldnames(T) )...)
-    elseif T <: Void # There's nothing to stack.
+    elseif T <: Nothing # There's nothing to stack.
         :(x) # :o
     else
         error("Sorry, I don't know how to stack a ", T, ".")
@@ -186,7 +186,7 @@ end
         end
     elseif !isempty(fieldnames(T)) # This is nice; we can't do this with multiple dispatch. Do this for + and * and remove the ModelStates thing?
         Expr(:block, ( :( k = stackem!(x, y.$f, k) ) for f in fieldnames(T) )...)
-    elseif T <: Void
+    elseif T <: Nothing
         :(k) # Don't choke on that k, my friend.
     else
         error("Sorry, I don't know how to stack a ", T, ".")

@@ -10,6 +10,9 @@ using .EratosthenesRotations
 include(joinpath("utilities", "UDPConnections.jl"))
 using .UDPConnections
 
+using Sockets
+import Libdl
+
 # Let anyone use this controller.
 export StarTrackerAndGyroController
 
@@ -30,13 +33,13 @@ mutable struct StarTrackerAndGyroControllerConstants
     target::Vector{Float64}
     mode::StarTrackerAndGyroControllerMode
     conn::UDPConnection
-    c_lib::Ptr{Void}
-    c_fcn::Ptr{Void}
+    c_lib::Ptr{Cvoid}
+    c_fcn::Ptr{Cvoid}
     StarTrackerAndGyroControllerConstants(target = [0.; 0.; 0.; 1.],
                                           mode   = jitl,
                                           conn   = UDPConnection(),
-                                          c_lib  = Ptr{Void}(0),
-                                          c_fcn  = Ptr{Void}(0)) =
+                                          c_lib  = Ptr{Cvoid}(0),
+                                          c_fcn  = Ptr{Cvoid}(0)) =
         new(target, mode, conn, c_lib, c_fcn)
 end
 
@@ -55,7 +58,7 @@ function StarTrackerAndGyroController()
     # This function always runs before the simulation starts up.
     function startup(t, constants, state, args...)
         if constants.mode == sitl
-            if is_windows()
+            if Sys.iswindows()
                 constants.c_lib = Libdl.dlopen("3_c_code/windows/lib-pd-controller.dll")
             else
                 constants.c_lib = Libdl.dlopen("3_c_code/linux/lib-pd-controller.so")
@@ -93,7 +96,7 @@ function StarTrackerAndGyroController()
             f_B   = [0.; 0.; 0.]
             τ_B   = [0.; 0.; 0.]
             ccall(constants.c_fcn,
-                  Void,
+                  Nothing,
                   (Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64}),
                   gains, q_TI, q_BI, ω_BI_B, f_B, τ_B);
 

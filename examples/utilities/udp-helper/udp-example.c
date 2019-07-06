@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include "udp-helper.h"
 
-int main(void)
+int main(Nothing)
 {
     UDPHelper comms;
     const char * target_ip_address = "127.0.0.1";

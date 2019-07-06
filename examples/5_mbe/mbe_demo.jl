@@ -4,7 +4,7 @@
 # underactuated vehicle. In includes the initial simulation, the Monte-Carlo
 # runs, and TODO.
 #
-# To run this file, start Julia, navigate to the directory containing this 
+# To run this file, start Julia, navigate to the directory containing this
 # file, and just include it in your main workspace, like so:
 #
 # ```
@@ -28,6 +28,7 @@ using Eratosthenes # The simulation engine (setup, simulate, mc)
 using ..MBEModels  # The MBEModels module included above (and "above" this module)
 import HDF5        # For loading the log file
 using Plots        # For plotting our results
+using LinearAlgebra
 
 # Create a directory for the log file.
 if !isdir("out"); mkdir("out"); end
@@ -41,7 +42,7 @@ yaml_file = joinpath(@__DIR__, "underactuated.yaml")
 
 # Run the scenario defined by our YAML file. The returned scenario will
 # have all of the final states.
-scenario = simulate(yaml_file)
+scenario = simulate(yaml_file, @__MODULE__)
 
 #########
 # Plots #
@@ -56,22 +57,23 @@ t, q_BI, ω_BI_B = HDF5.h5open(scenario.sim.log_file, "r") do logs
 end
 
 # Scalars are logged as 1-by-n. Convert to just n for the plot.
-t = squeeze(t, 1)
+t = dropdims(t, dims=1)
 
 # Choose a friendly plotting package.
-plotlyjs()
+pyplot()
+# plotlyjs()
 
 # Define each plot that we'll need.
-display(plot(t, q_BI.',
+display(plot(t, transpose(q_BI),
              label  = ["q1" "q2" "q3" "q4"],
              xlabel = "Time (s)",
              ylabel = "Attitude Quaternion"))
-display(plot(t, 180/π * ω_BI_B.',
+display(plot(t, 180/π * transpose(ω_BI_B),
              label  = ["ω1" "ω2" "ω3"],
              xlabel = "Time (s)",
              ylabel = "Rotation Rate (deg/s)"))
 
-# The plot looks fine, so we can now trying some Monte-Carlo runs.
+# The plot looks fine, so we can now try some Monte-Carlo runs.
 # See mbe_demo_mc.jl.
 
 end # module

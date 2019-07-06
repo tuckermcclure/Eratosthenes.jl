@@ -1,14 +1,15 @@
 # Make sure we're running from the examples directory.
 # cd(@__DIR__())
 
-reload("Eratosthenes")
-sleep(0.1)
+# reload("Eratosthenes")
+# sleep(0.1)
 
 module Temp
 
 # using BenchmarkTools
 using Eratosthenes # Bring in the top-level sim environment.
 using Plots # For plotting (Pkg.add("Plots"); Pkg.add("PyPlot");)
+using Printf
 import HDF5 # For loading the log file (Pkg.add("HDF5");)
 # import Juno # For the progress bar
 
@@ -36,7 +37,7 @@ scenario = setup("scenarios/reaction-wheel.yaml")
 # Run it with text progress (e.g., from VS Code).
 simulate(scenario) do k, n
     if (k-1) % 100 == 0
-        @printf("Progress: % 5.1f%% done.\n", round(100*(k-1)/(n-1), 1))
+        @printf("Progress: % 5.1f%% done.\n", round(100*(k-1)/(n-1), digits=1))
     end
     return true
 end
@@ -82,25 +83,26 @@ if !isempty(scenario.sim.log_file)
 
     # Scalars are logged as 1-by-n (don't know why). Convert to just n for
     # the sake of plotting.
-    t      = squeeze(t, 1)
-    #t_st   = squeeze(t_st, 1)
-    #t_gyro = squeeze(t_gyro, 1)
+    t      = dropdims(t, dims=1)
+    #t_st   = dropdims(t_st, dims=1)
+    #t_gyro = dropdims(t_gyro, dims=1)
 
-    # Choose a friendly plotting package. PyPlot behaves nicely.
+    # Choose a friendly plotting package.
     # pyplot()
-    plotlyjs()
+    # plotlyjs()
+    gr()
 
     # Define each plot that we'll need.
-    display(plot(t, q_BI.',
+    display(plot(t, transpose(q_BI),
                  label  = ["q1" "q2" "q3" "q4"],
                  xlabel = "Time (s)",
                  ylabel = "Attitude Quaternion"))
-    display(plot(t, 180/π * ω_BI_B.',
+    display(plot(t, 180/π * transpose(ω_BI_B),
                  label  = ["ω1" "ω2" "ω3"],
                  xlabel = "Time (s)",
                  ylabel = "Rotation Rate (deg/s)"))
 
-    display(plot(randn(5,5))) # Dummy. This doesn't show up, but the next will?
+    # display(plot(randn(5,5))) # Dummy. This doesn't show up, but the next will?
 
     display(plot(t, 30/π*[rw1[1,:] rw2[1,:] rw3[1,:]],
                  label  = ["rw1" "rw2" "rw3"],
@@ -108,27 +110,27 @@ if !isempty(scenario.sim.log_file)
                  ylabel = "Wheel Rate (RPM)"))
 
     # # For coupled reaction wheels:
-    # display(plot(t, 30/π*(rw1 - ω_BI_B).',
+    # display(plot(t, 30/π*(rw1 - transpose(ω_BI_B)),
     #              xlabel = "Time (s)",
     #              ylabel = "RW1 Rate (RPM)"))
-    # display(plot(t, 30/π*(rw1 - ω_BI_B).',
+    # display(plot(t, 30/π*(rw1 - transpose(ω_BI_B)),
     #              xlabel = "Time (s)",
     #              ylabel = "RW1 Rate (RPM)")) # I need two of this plot to get it plotted once??
-    # display(plot(t, 30/π*([0. -1. 0.; 1. 0. 0.; 0. 0. 1.] * rw2 - ω_BI_B).',
+    # display(plot(t, 30/π*([0. -1. 0.; 1. 0. 0.; 0. 0. 1.] * rw2 - transpose(ω_BI_B)),
     #              xlabel = "Time (s)",
     #              ylabel = "RW2 Rate (RPM)"))
-    # display(plot(t, 30/π*([0. 0. -1.; 0. 1. 0.; 1. 0. 0.] * rw3 - ω_BI_B).',
+    # display(plot(t, 30/π*([0. 0. -1.; 0. 1. 0.; 1. 0. 0.] * rw3 - transpose(ω_BI_B)),
     #              xlabel = "Time (s)",
     #              ylabel = "RW3 Rate (RPM)"))
 
     # # For simple reaction wheels:
-    # display(plot(t, 30/π*squeeze(rw1,1),
+    # display(plot(t, 30/π*dropdims(rw1,dims=1),
     #              xlabel = "Time (s)",
     #              ylabel = "RW1 Rate (RPM)"))
-    # display(plot(t, 30/π*squeeze(rw2,1),
+    # display(plot(t, 30/π*dropdims(rw2,dims=1),
     #              xlabel = "Time (s)",
     #              ylabel = "RW2 Rate (RPM)"))
-    # display(plot(t, 30/π*squeeze(rw3,1),
+    # display(plot(t, 30/π*dropdims(rw3,dims=1),
     #              xlabel = "Time (s)",
     #              ylabel = "RW3 Rate (RPM)"))
 

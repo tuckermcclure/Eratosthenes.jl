@@ -5,10 +5,10 @@ include("steps.jl")
 simulate(scenario::Scenario) = simulate(nothing, scenario)
 
 # Simulation from file name
-simulate(file_name::String, context = current_module()) = simulate(nothing, setup(Scenario(), file_name, context))
+simulate(file_name::String, context = @__MODULE__) = simulate(nothing, setup(Scenario(), file_name, context))
 
 # Simulation from file name with progress function
-simulate(progress_fcn::Function, file_name::String, context = current_module()) = simulate(progress_fcn, setup(Scenario(), file_name, context))
+simulate(progress_fcn::Function, file_name::String, context = @__MODULE__) = simulate(progress_fcn, setup(Scenario(), file_name, context))
 
 """
     simulate
@@ -17,7 +17,7 @@ This is the primary simulation function that begins with a set up scenario and
 propagates until the end of time.
 
 """
-function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_init::Bool = true)
+function simulate(progress_fcn::Union{Function,Nothing}, scenario::Scenario, needs_init::Bool = true)
 
     # Create the log.
     if !isempty(scenario.sim.log_file)
@@ -35,7 +35,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
     # necessary seeds for other RNGs. When this is used as part of a Monte-Carlo
     # test, this global seed and all seeds below will be overridden. However,
     # we're not there yet; that's Milestone 3.
-    srand(scenario.sim.seed)
+    Random.seed!(scenario.sim.seed)
 
     # Seed the components' RNGs.
     seed(scenario.environment.rand)
@@ -363,7 +363,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
         ############
 
         # Loop over each index of the time array.
-        for k = 1:nt
+        for outer k = 1:nt
 
             # Update the progress bar.
             if progress_fcn != nothing
@@ -372,7 +372,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                 end
             end
 
-            # Put all of the continuous-time states, draws, and implicit variables 
+            # Put all of the continuous-time states, draws, and implicit variables
             # into vectors.
             X = []
             D = []
@@ -395,7 +395,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                     push!(V, computer.board.implicit)
                 end
             end
-            
+
             ##############
             # Dimensions #
             ##############
@@ -403,7 +403,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
             # On the first sample, we discover some dimensions.
             if k == 1
 
-                # We'll count up the number of states and the number of elements in the state 
+                # We'll count up the number of states and the number of elements in the state
                 # derivative, as well as the mapping between them.
                 nx  = 0
                 nxd = 0
@@ -419,7 +419,7 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
                     if nxdc == 0 # If this state is discrete only, add a bunch of zero indices.
                         append!(x_to_xd, zeros(Int64, nxc))
                     elseif nxdc == nxc # Otherwise, map from state element to derivative elements.
-                        append!(x_to_xd, nxd + (1:nxdc))
+                        append!(x_to_xd, nxd .+ (1:nxdc))
                     else # And if the numbers of those things don't match, it's a problem.
                         error("The number of derivatives don't match the number of states for the ", X[c], " type.")
                     end
@@ -435,10 +435,10 @@ function simulate(progress_fcn::Union{Function,Void}, scenario::Scenario, needs_
             #############
             # Propagate #
             #############
-                
+
             # Propagate from k-1 to k. We skip the first sample and just log it.
             if k > 1
-                
+
                 #####################
                 # Continuous Update #
                 #####################
@@ -766,7 +766,7 @@ function calculate_time_steps(scenario)
             end
 
             # Now add on the discrete step. (Doing this allows the step to occur
-            # right at count * dt and avoids the accumulation of roundoff error over
+            # right at count * dt and aNothings the accumulation of roundoff error over
             # time.
             t = tn
             push!(ts, t)

@@ -8,7 +8,7 @@ function get_effects(t, X, V, D, U, scenario)
 
     E = Dict{String, Dict{String, Tuple}}() # Instead of starting fresh, use the existing.
     c = 0 # TODO: Use something like component.id for this?
-    for c = 1:length(scenario.vehicles)
+    for outer c = 1:length(scenario.vehicles)
         E[scenario.vehicles[c].name] = Dict{String, Tuple}()
         E[scenario.vehicles[c].name][scenario.vehicles[c].body.name] =
             scenario.vehicles[c].body.effects(
@@ -53,7 +53,7 @@ function get_effects(t, X, V, D, U, scenario)
             c += 1
             if computer.board.effects != nothing
                 E[vehicle.name][computer.name] = computer.board.effects(t, computer.board.constants,
-                                                                        X[c], D[c], V[c], 
+                                                                        X[c], D[c], V[c],
                                                                         U[vehicle.name][computer.name][computer.board.name],
                                                                         effects_bus_copy[vehicle.name], effects_bus_copy)
             end
@@ -116,13 +116,13 @@ function solve_for_V(t, X, V, D, U, scenario, Gx, λ=1e-6, tol=1e-12, k_max=1000
         if k == k_max; error("Could not satisfy the constraints functions after k iterations on the implicit variables."); end
         k += 1 # Ok, we're committing to this.
 
-        # Calculate the Jacobian of the time-derivative of the constraints wrt the 
-        # implicit variables and use a Levenberg-Marquardt search for the implicit 
+        # Calculate the Jacobian of the time-derivative of the constraints wrt the
+        # implicit variables and use a Levenberg-Marquardt search for the implicit
         # parameters driving the time-derivative of the constraints to zero.
         J   =  Gx * dfdV(t, X, V, D, U, scenario)
-        JtJ =  J.' * J
-        A   =  JtJ + λ * diagm(diag(JtJ))
-        σ   =  -(pinv(A) * (J.' * cd)) # Use pinv in case of mischief.
+        JtJ =  transpose(J) * J
+        A   =  JtJ + λ * diagm(0 => diag(JtJ))
+        σ   =  -(pinv(A) * (transpose(J) * cd)) # Use pinv in case of mischief.
 
         # Update each element of the implicit variables.
         for c = 1:length(σ); setk!(V, c, getk(V, c) + σ[c]); end # Could make a single updatek!(V, c, foo) function.
@@ -138,13 +138,13 @@ function minor(t, X, V, D, U, scenario)
     if scenario.dims.nv > 0
 
         # Let g be the constraint function.
-        # 
+        #
         # If 0 = g(t, x), then 0 = d/dt g, and by the chain rule 0 = d/dx g * dx/dt.
         # We have a function for dx/dt given the implicit variables, v: dx/dt = f(t, x, v).
         # We can figure out the Jacobian, Gx = d/dx g, using finite differencing.
         # Then, we can solve for v s.t. Gx * f(t, x, v) = 0.
         #
-        # Constraints and continuous equations will always be solved together. Should the contraints 
+        # Constraints and continuous equations will always be solved together. Should the contraints
         # be the second output of the `derivatives` function? No, that would make everyone have to
         # output a tuple. Plus, it's a toss up between contraints functions having duplicated work
         # from the derivatives function and the derivatives function being commonly "heavier" than
@@ -152,11 +152,11 @@ function minor(t, X, V, D, U, scenario)
 
         # First, solve the constraints function for whatever part of V is observable.
         # V = solve_for_V_index_0(t, X, V, D, U, scenario) # Use SVD and if all S == 0, then there are no index 0 constraints.
-        
+
         # Now differentiate the constraints function wrt the state.
         Gx = dgdX(t, X, V, D, U, scenario, 1e-9)
 
-        # Now serach for implicit variables that put the state time derivative in the null 
+        # Now serach for implicit variables that put the state time derivative in the null
         # space of the constraint Jacobian. This solves for "index 1" constraints.
         V, Xd = solve_for_V(t, X, V, D, U, scenario, Gx)
 
@@ -170,7 +170,7 @@ end
 
 # Get the vector of constraints.
 function dae(t, X, V, D, U, scenario)
-    
+
     # Get all of the effects corresponding to this state.
     E = get_effects(t, X, V, D, U, scenario)
 
@@ -204,7 +204,7 @@ function dae(t, X, V, D, U, scenario)
             c += 1
             if computer.board.constraints != nothing
                 append!(constraints, computer.board.constraints(t, computer.board.constants,
-                                                                X[c], D[c], V[c], 
+                                                                X[c], D[c], V[c],
                                                                 U[vehicle.name][computer.name][computer.board.name],
                                                                 E[vehicle.name], E))
             end
@@ -213,7 +213,7 @@ function dae(t, X, V, D, U, scenario)
     end
 
     return constraints
-    
+
 end
 
 # Get the vector of derivatives.
@@ -223,7 +223,7 @@ function ode(t, X, V, D, U, scenario)
     E = get_effects(t, X, V, D, U, scenario)
 
     # Create the set of derivatives that we will write to below.
-    derivs = Vector{Any}(length(X)) # Would use eltype(X) but can't if we want to use nothing.
+    derivs = Vector{Any}(undef, length(X)) # Would use eltype(X) but can't if we want to use nothing.
     fill!(derivs, nothing)
 
     # Get the derivatives for each physical thing. We need to do this in the same
@@ -234,7 +234,7 @@ function ode(t, X, V, D, U, scenario)
         c += 1
         if vehicle.body.derivatives != nothing
             derivs[c] = vehicle.body.derivatives(t, vehicle.body.constants,
-                                                 X[c], D[c], V[c], 
+                                                 X[c], D[c], V[c],
                                                  E[vehicle.name], E)
         end
     end
@@ -244,7 +244,7 @@ function ode(t, X, V, D, U, scenario)
             c += 1
             if component.derivatives != nothing
                 derivs[c] = component.derivatives(t, component.constants,
-                                                  X[c], D[c], V[c], 
+                                                  X[c], D[c], V[c],
                                                   U[vehicle.name][component.name],
                                                   E[vehicle.name], E)
             end
@@ -253,7 +253,7 @@ function ode(t, X, V, D, U, scenario)
             c += 1
             if computer.board.derivatives != nothing
                 derivs[c] = computer.board.derivatives(t, computer.board.constants,
-                                                       X[c], D[c], V[c], 
+                                                       X[c], D[c], V[c],
                                                        U[vehicle.name][computer.name][computer.board.name],
                                                        E[vehicle.name], E)
             end

@@ -106,13 +106,13 @@ int udp_receive(UDPHelper * helper)
 }
 
 /* Pull some amount of data out of the read buffer. */
-int udp_pull(UDPHelper * helper, void * data, int length)
+int udp_pull(UDPHelper * helper, Nothing * data, int length)
 {
     /* Only read if there's room. Otherwise, the user is asking for more than we have. */
     if (helper->read_head + length > SOCKET_BUFFER_LENGTH) { return -1; }
 
     /* Copy the data into the space the user has allocated. */
-    memcpy(data, (void *) &(helper->input_buffer) + helper->read_head, length);
+    memcpy(data, (Nothing *) &(helper->input_buffer) + helper->read_head, length);
     helper->read_head += length;
 
     /* Return how much we have read from the buffer so far. */
@@ -129,13 +129,13 @@ int udp_burn(UDPHelper * helper, int length)
 }
 
 /* Put new data into the send buffer. */
-int udp_push(UDPHelper * helper, void * data, int length)
+int udp_push(UDPHelper * helper, Nothing * data, int length)
 {
     /* Make sure there's space left in the buffer for what the user is adding. */
     if (helper->write_head + length > SOCKET_BUFFER_LENGTH) { return -1; }
 
     /* Copy the data from the space the user has allocated. */
-    memcpy((void *) &(helper->output_buffer) + helper->write_head, data, length);
+    memcpy((Nothing *) &(helper->output_buffer) + helper->write_head, data, length);
     helper->write_head += length;
 
     /* Return how much we have written to the buffer so far. */
@@ -161,13 +161,13 @@ int udp_transmit(UDPHelper * helper)
 }
 
 /* Reset the write head. */
-void udp_flush_output(UDPHelper * helper)
+Nothing udp_flush_output(UDPHelper * helper)
 {
     helper->write_head = 0;
 }
 
 /* Close the socket whwen done. */
-void udp_close(UDPHelper * helper)
+Nothing udp_close(UDPHelper * helper)
 {
     close(helper->id);
 }

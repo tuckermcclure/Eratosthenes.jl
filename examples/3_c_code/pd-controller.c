@@ -15,7 +15,7 @@
 #define EXPORT
 #endif
 
-void qdiff(const double a[4], const double b[4], double c[4])
+Nothing qdiff(const double a[4], const double b[4], double c[4])
 {
     c[0] = -a[3]*b[0] - a[2]*b[1] + a[1]*b[2] + a[0]*b[3];
     c[1] =  a[2]*b[0] - a[3]*b[1] - a[0]*b[2] + a[1]*b[3];
@@ -57,7 +57,7 @@ double q2aa(const double q[4], double r[3])
     return theta;
 }
 
-EXPORT void pd_controller(const double gains[2], const double q_TI[4], const double q_BI[4], const double w_BI_B[3], double f_B[3], double tau_B[3])
+EXPORT Nothing pd_controller(const double gains[2], const double q_TI[4], const double q_BI[4], const double w_BI_B[3], double f_B[3], double tau_B[3])
 {
     double q_TB[4] = {0., 0., 0., 0.};
     double r_B[3]  = {0., 0., 0.};
